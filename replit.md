@@ -6,8 +6,8 @@ Full-stack legal AI SaaS platform for Costa Rica built with React + Express + Po
 ## Architecture
 - **Frontend**: React + Vite, TypeScript, TailwindCSS, shadcn/ui, Wouter routing, TanStack Query
 - **Backend**: Express.js (TypeScript), Drizzle ORM, PostgreSQL + pgvector
-- **AI**: OpenAI (gpt-4o-mini via Replit AI Integrations)
-- **Legal Search**: PostgreSQL FTS (plainto_tsquery Spanish stemming) — Replit AI proxy does not support /embeddings
+- **AI**: OpenAI (gpt-4o via Replit AI Integrations, temperature 0.1, 2500 max_tokens)
+- **Legal Search**: 3-layer retrieval pipeline (Layer A: article number O(1) lookup, Layer B: keyword/theme scored search, Layer C: PostgreSQL FTS with OR/AND strategies) — no embeddings (Replit AI proxy doesn't support /embeddings)
 
 ## Key Routes
 
@@ -56,7 +56,7 @@ Currently using demo user (`DEMO_USER_ID = "00000000-0000-0000-0000-000000000001
 2. **RBAC** — `RequireRole` component gates routes by role rank (admin > senior > assistant > intern); sidebar hides Analytics/Team for non-admins; server enforces `hasRoleAtLeast()` on org endpoints
 3. **Team Management** — `/dashboard/team` (admin only): list members, change roles, remove with confirm dialog, invite by email (generates invite link), pending invites list
 4. **Org-scoped Data** — all list queries (cases, documents, appeals, conversations, deadlines) filter by `orgId` when user belongs to an org; new records include `orgId`
-5. **AI Chat** — RAG over 4,481 chunks of 8 Costa Rican legal codes via PostgreSQL FTS (Spanish stemming); retrieval uses `plainto_tsquery` + `ts_rank` with ILIKE fallback; files ingested: Constitución Política, Código Civil, Código Penal, Código Procesal Penal, Código de Comercio, Ley General Administración Pública, Ley RAC, Ley de Tránsito 9078; ingestion script at `scripts/ingest-legal-docs.ts`
+5. **AI Chat** — 3-layer RAG pipeline over 4,482 chunks of 8 Costa Rican legal codes; Layer A: regex article-number detection → O(1) in-memory Map lookup (all sub-chunks); Layer B: 27 keyword/theme patterns scored against in-memory article cache with prompt-word boosting; Layer C: PostgreSQL FTS (Spanish stemming) with AND+OR dual strategy and fuente-prioritized search. Pipeline file: `server/legal-pipeline.ts`; ingestion: `scripts/ingest-legal-docs.ts`
 6. **Document Analysis** — PDF/DOCX upload → AI structured analysis (parties, risks, omissions)
 7. **Appeal Generator** — 5-step wizard with streaming output, edit-in-editor, copy/download
 8. **Document Editor** — Tiptap editor with 30s autosave, version history (max 10), DOCX export

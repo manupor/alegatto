@@ -124,7 +124,7 @@ function chunkByArticle(text: string): { articulo: string; contenido: string }[]
 
   for (const part of parts) {
     const trimmed = part.trim();
-    if (trimmed.length < 50) continue;
+    if (trimmed.length < 20) continue;
 
     const match = ARTICLE_HEADER.exec(trimmed);
     const artNum = match ? `Artículo ${match[1]}` : "";
@@ -141,7 +141,7 @@ function chunkByArticle(text: string): { articulo: string; contenido: string }[]
           chunk += s + " ";
         }
       }
-      if (chunk.trim().length > 50) {
+      if (chunk.trim().length > 20) {
         chunks.push({ articulo: artNum ? `${artNum} (${++subIdx})` : "Bloque", contenido: chunk.trim() });
       }
     } else {
