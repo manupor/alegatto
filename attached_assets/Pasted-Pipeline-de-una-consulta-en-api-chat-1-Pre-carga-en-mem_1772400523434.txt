@@ -1,0 +1,117 @@
+Pipeline de una consulta en /api/chat
+1. Pre-carga en memoria (primer request)
+data/processed/
+  codigo-civil.json        (JSON con artículos)
+  codigo-comercio.json
+  codigo-trabajo.json
+  codigo-penal.json
+  codigo-procesal-penal.json
+Se cargan una sola vez con readFileSync y se cachean en dos estructuras globales:
+
+codeCache[codeName] → array de artículos
+codeIndex[codeName] → Map<número, artículo> para lookup O(1)
+Total: ~3,734 artículos en RAM.
+
+2. Retrieval — 3 capas en cascada
+Cuando llega { message, conversationId, messages, materias }:
+
+Capa A — Detección de número de artículo
+Regex sobre el mensaje: artículo 82, arts. 45 al 50, etc.
+
+Si detecta número → busca en JSON local (O(1) via codeIndex)
+Si no encuentra localmente → hace query a documents en Postgres con regex:
+sql
+SELECT * FROM documents 
+WHERE articulo ~* 'artículo\s*82($|[^0-9])'
+AND fuente ILIKE '%Trabajo%'
+LIMIT 3
+También detecta el código correcto leyendo el historial de mensajes anteriores (contexto de conversación)
+Capa B — Búsqueda por tema (keyword)
+Si no hay número de artículo, o para enriquecer:
+
+25+ patrones regex → detectan tema: despido, vacaciones, robo, herencia...
+Por cada tema: busca en los 5 JSONs con normalizeText() (sin tildes, sin mayúsculas)
+Máximo 6 artículos nuevos agregados al contexto
+Capa C — RAG vectorial (pgvector)
+Siempre corre (incluso si ya encontró artículos):
+
+ts
+// 1. Genera embedding del mensaje del usuario
+openai.embeddings.create({ model: 'text-embedding-3-small', input: message })
+ 
+// 2. Cosine similarity contra los 10,097 chunks
+SELECT fuente, materia, articulo, contenido,
+  1 - (embedding <=> '[0.02, -0.14, ...]'::vector) AS score
+FROM documents
+ORDER BY embedding <=> '[...]'::vector
+LIMIT 5
+Solo agrega chunks con score > 0.45 que no estén ya en el contexto.
+
+3. Construcción del prompt
+Todo lo encontrado se empaqueta en un bloque de contexto:
+
+═══ CONTEXTO LEGAL DE COSTA RICA (GROUND TRUTH) ═══
+ 
+**Código de Trabajo (Ley N°2)**
+**Artículo 82:**
+> El patrono que despida a un trabajador...
+ 
+---
+**Código de Trabajo (LABORAL)**
+**ARTICULO 82:**
+> [chunk del vector search]
+ 
+═══════════════════════════════════════════════════
+Luego se detectan modos especiales:
+
+isAnalysisRequest → si el mensaje tiene "analiza", "redacta", "revisa" o es >200 chars
+isReviewMode → "riesgo procesal", "auditoría", "prescripción"
+El groundedUserMessage final tiene formato:
+
+📚 CONTEXTO LEGAL...
+[artículos recuperados]
+[instrucciones de modo si aplica]
+CONSULTA DEL USUARIO: [mensaje original]
+4. Llamada a OpenAI
+ts
+openai.chat.completions.create({
+  model: 'gpt-4o',           // no mini — el full
+  temperature: 0.1,          // muy determinista (legal)
+  max_tokens: 2500,
+  messages: [
+    { role: 'system', content: LEGAL_SYSTEM_PROMPT },
+    ...últimos 10 mensajes del historial,
+    { role: 'user', content: groundedUserMessage }
+  ]
+})
+5. Post-procesamiento y persistencia
+La respuesta se parsea con regex para extraer metadata:
+
+ts
+/Materia**: \[?([A-Z]+)\]?/  → LABORAL, PENAL, CIVIL...
+/Riesgo Procesal**: \[?([A-Z]+)\]?/  → BAJO, MEDIO, ALTO
+Se guarda en Postgres:
+
+Conversation (si no existe)
+Message con tokensUsed, durationMs
+MessageMetadata con materia, tipo, proceso, riesgo, artículos detectados
+Diagrama resumido
+Usuario
+  │
+  ▼
+[message]
+  ├─► Regex artículo → JSON local (O1) ─────────────┐
+  ├─► Keyword patterns → JSON keyword search ────────┤
+  └─► text-embedding-3-small → pgvector cosine ──────┤
+                                                      ▼
+                                          [contexto legal ensamblado]
+                                                      │
+                                                      ▼
+                                          gpt-4o (temp=0.1, 2500 tok)
+                                                      │
+                                                      ▼
+                                          Respuesta + metadata → DB
+                                                      │
+                                                      ▼
+                                                  Cliente
+El truco principal: las 3 capas son complementarias — el JSON local es rápido y exacto para artículos mencionados por número, el keyword search encuentra contexto relacionado, y el vector search captura semántica que los otros dos no cubren.

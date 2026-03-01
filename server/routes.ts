@@ -11,6 +11,7 @@ import { randomUUID } from "crypto";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
+import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./legal-pipeline";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -273,7 +274,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ──────────────────────────────────────────
   // AI CHAT
   // ──────────────────────────────────────────
+  // Warm up legal corpus cache on startup
+  ensureCacheLoaded().catch(e => console.error("Cache warmup error:", e));
+
   app.post("/api/chat", async (req, res) => {
+    const t0 = Date.now();
     try {
       const { prompt, conversationId: inputConvId, materias } = req.body;
       if (!prompt) return res.status(400).json({ message: "prompt required" });
@@ -286,37 +291,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         const conv = await storage.createConversation({
           userId,
           orgId: orgId ?? undefined,
-          title: prompt.substring(0, 40),
+          title: prompt.substring(0, 60),
         });
         conversationId = conv.id;
       }
 
       await storage.createMessage({ conversationId, role: "user", content: prompt });
+
+      // Fetch last 10 messages for conversation context
       const msgs = await storage.getMessages(conversationId);
-      const recent = msgs.slice(-8);
-      const searchResults = await vectorSearch(prompt, materias, 5);
+      const historyMsgs = msgs
+        .slice(-11, -1)
+        .map(m => ({ role: m.role, content: m.content }));
 
-      let contextStr = "Contexto de normativa costarricense:\n\n";
-      for (const r of searchResults as any[]) {
-        contextStr += `[${r.fuente}${r.articulo ? " - " + r.articulo : ""}]\n${r.contenido}\n\n`;
-      }
+      // Run the 3-layer retrieval pipeline
+      const { groundedMessage, layerStats } = await runLegalPipeline(prompt, historyMsgs, materias);
 
-      const systemPrompt = `Eres LexAI CR, asistente legal experto en derecho costarricense. Responde en español usando el siguiente contexto legal.
-${contextStr}`;
+      console.log(`[Chat] Pipeline stats — A:${layerStats.a} B:${layerStats.b} C:${layerStats.c} articles retrieved`);
+
+      // Build messages array: system + history + grounded user message
+      const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
+        { role: "system", content: LEGAL_SYSTEM_PROMPT },
+        ...historyMsgs.map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+        { role: "user", content: groundedMessage },
+      ];
 
       const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          { role: "system", content: systemPrompt },
-          ...recent.slice(0, -1).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-          { role: "user", content: prompt },
-        ],
-        max_tokens: 2000,
+        model: "gpt-4o",
+        temperature: 0.1,
+        max_tokens: 2500,
+        messages: chatMessages,
       });
 
       const responseText = completion.choices[0]?.message?.content || "Lo siento, no pude generar una respuesta.";
-      await storage.createMessage({ conversationId, role: "assistant", content: responseText, tokensUsed: completion.usage?.total_tokens || 0 });
-      res.json({ response: responseText, conversationId });
+      const durationMs = Date.now() - t0;
+
+      // Extract metadata from response using regex
+      const materiaMatch = /\*\*Materia\*\*:\s*\[?([A-Z_]+)\]?/i.exec(responseText);
+      const riesgoMatch = /\*\*Riesgo Procesal\*\*:\s*\[?([A-Z\/]+)\]?/i.exec(responseText);
+      const materiaDetected = materiaMatch?.[1] ?? null;
+      const riesgoDetected = riesgoMatch?.[1] ?? null;
+
+      await storage.createMessage({
+        conversationId,
+        role: "assistant",
+        content: responseText,
+        tokensUsed: completion.usage?.total_tokens || 0,
+      });
+
+      res.json({
+        response: responseText,
+        conversationId,
+        meta: {
+          materia: materiaDetected,
+          riesgo: riesgoDetected,
+          layerStats,
+          durationMs,
+          tokensUsed: completion.usage?.total_tokens || 0,
+        },
+      });
     } catch (err: any) {
       console.error("Chat error:", err);
       res.status(500).json({ message: "Error en el chat" });
