@@ -99,8 +99,37 @@ npm install
 EXPO_PUBLIC_API_URL=http://localhost:5000 npx expo start
 ```
 
+## Authentication
+Real session-based auth using passport.js + bcryptjs. **No Replit OIDC dependency.**
+
+- **Strategy**: `passport-local` with bcrypt password hashing (10 rounds)
+- **Sessions**: `express-session` backed by PostgreSQL (`connect-pg-simple`, `sessions` table, auto-created)
+- **Auth module**: `server/auth.ts` — exports `setupAuth(app)`, `passport`, `bcrypt`
+- **Dev fallback**: In `NODE_ENV=development`, unauthenticated requests fall back to `DEMO_USER_ID` so you don't need to log in during development
+- **Production**: `getUserId()` returns `""` when not authenticated → 401 returned
+- **Demo credentials**: `demo@lexai.cr` / `demo123`
+- **Registration**: `POST /api/auth/register` creates real bcrypt-hashed users
+
+## Deployment
+
+### Production Build
+```bash
+npm run build          # builds dist/public/ (frontend) + dist/index.cjs (server)
+npm run start          # runs node dist/index.cjs
+```
+
+### Vercel Deployment
+- `vercel.json` is configured for Express+Vite (NOT Next.js)
+- `api/index.ts` is the Vercel serverless entry point (handles all /api/* routes)
+- `outputDirectory: "dist/public"` serves static frontend from Vercel CDN
+- Set env vars in Vercel dashboard: `DATABASE_URL`, `SESSION_SECRET`, `OPENAI_API_KEY`
+
+### Alternative Platforms (Recommended for Production)
+Railway, Render, Fly.io — better suited for long-running Express servers with WebSocket support and larger memory. Simply set the start command to `npm run start`.
+
 ## Development Notes
 - PDF parsing: uses `pdf-parse` via CommonJS `require()` (ESM workaround)
 - Vector search may fail silently if pgvector extension not loaded; chat still works
 - `font-display` is a CSS custom property (not a Tailwind class); use plain classes for headings
 - NEVER modify `vite.config.ts`, `drizzle.config.ts`, or `package.json`
+- TypeScript errors in `server/replit_integrations/` are pre-existing and don't affect the build (esbuild strips types)

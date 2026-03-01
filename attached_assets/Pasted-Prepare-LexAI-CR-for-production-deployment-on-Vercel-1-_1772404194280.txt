@@ -1,0 +1,63 @@
+Prepare LexAI CR for production deployment on Vercel.
+
+1. EXPORT FROM REPLIT TO GITHUB
+- Initialize git repo if not already done
+- Create .gitignore that excludes: .env, node_modules, .next, 
+  *.pdf files in scripts/python/docs/
+- Make sure all environment variables are only in .env (never hardcoded)
+- Push everything to a new GitHub repo called "lexai-cr"
+
+2. VERCEL CONFIGURATION
+Create vercel.json in root:
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "regions": ["iad1"],
+  "env": {
+    "DATABASE_URL": "@database_url",
+    "OPENAI_API_KEY": "@openai_api_key",
+    "DROPBOX_SIGN_API_KEY": "@dropbox_sign_api_key",
+    "NEXTAUTH_SECRET": "@nextauth_secret",
+    "NEXTAUTH_URL": "@nextauth_url"
+  }
+}
+
+3. REPLACE REPLIT AUTH WITH NEXTAUTH
+Install: npm install next-auth @auth/prisma-adapter
+Configure NextAuth with:
+- Google OAuth provider (primary)
+- Email/password provider (fallback)
+- Prisma adapter connected to existing DB
+- Session strategy: JWT
+- On first login: check if user has organization, 
+  if not redirect to /register-firm
+- Protect all /dashboard/* routes with session check
+
+Create:
+- app/api/auth/[...nextauth]/route.ts
+- lib/auth.ts with getServerSession helper
+- middleware.ts to protect dashboard routes
+- Update all existing auth checks to use NextAuth session
+
+4. ENVIRONMENT VARIABLES DOCUMENTATION
+Create .env.example with all required variables:
+DATABASE_URL=postgresql://...
+OPENAI_API_KEY=sk-...
+DROPBOX_SIGN_API_KEY=...
+NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
+NEXTAUTH_URL=https://lexai.cr
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+
+5. BUILD OPTIMIZATION
+- Run npm run build and fix any TypeScript errors
+- Add loading.tsx files for all dashboard routes
+- Add error.tsx boundary for all dashboard routes
+- Make sure all images use next/image
+- Add metadata (title, description, og:image) to layout.tsx:
+  title: "LexAI CR — Asistente Jurídico Inteligente para Costa Rica"
+  description: "Plataforma legal con IA para abogados costarricenses"
+
+Confirm the build passes with 0 errors before finishing.

@@ -1,6 +1,27 @@
 node_modules
 dist
 .DS_Store
+.env
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Legal docs (large PDFs)
+scripts/python/docs/*.pdf
+scripts/python/docs/*.PDF
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+Thumbs.db
+
+# Mobile
+mobile/node_modules

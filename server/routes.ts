@@ -4,7 +4,7 @@ import { storage } from "./storage";
 import { z } from "zod";
 import OpenAI from "openai";
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import multer from "multer";
 import mammoth from "mammoth";
 import { randomUUID } from "crypto";
@@ -12,6 +12,8 @@ import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
 import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./legal-pipeline";
+import { passport, bcrypt } from "./auth";
+import { users } from "@shared/schema";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -24,10 +26,11 @@ const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 
 async function ensureDemoUser() {
   try {
+    const hash = await bcrypt.hash("demo123", 10);
     await db.execute(sql`
       INSERT INTO users (id, email, password, plan, created_at)
-      VALUES (${DEMO_USER_ID}, 'demo@lexai.cr', 'demo', 'FREE', NOW())
-      ON CONFLICT (id) DO NOTHING
+      VALUES (${DEMO_USER_ID}, 'demo@lexai.cr', ${hash}, 'FREE', NOW())
+      ON CONFLICT (id) DO UPDATE SET password = EXCLUDED.password WHERE users.password = 'demo'
     `);
   } catch {}
 }
@@ -114,34 +117,80 @@ async function vectorSearch(queryText: string, materias?: string[], limit = 5): 
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await ensureDemoUser();
-  const getUserId = (_req: any): string => DEMO_USER_ID;
+
+  const getUserId = (req: any): string => {
+    if (req.user?.id) return req.user.id;
+    if (process.env.NODE_ENV !== "production") return DEMO_USER_ID;
+    return "";
+  };
+
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (req.user?.id) return next();
+    if (process.env.NODE_ENV !== "production") return next();
+    return res.status(401).json({ message: "No autenticado" });
+  };
 
   // ──────────────────────────────────────────
   // AUTH
   // ──────────────────────────────────────────
   app.get("/api/auth/me", async (req, res) => {
     const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "No autenticado" });
+
     const { org, role } = await getOrgCtx(userId);
+    const user = req.user as any;
     res.json({
       id: userId,
-      email: "demo@lexai.cr",
-      name: "Abogado Demo",
+      email: user?.email ?? "demo@lexai.cr",
+      name: user?.name ?? "Abogado Demo",
       org: org ? { id: org.id, name: org.name, slug: org.slug, plan: org.plan } : null,
       role,
     });
   });
 
-  app.post("/api/auth/login", async (req, res) => {
-    const { org, role } = await getOrgCtx(DEMO_USER_ID);
-    res.json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo", org, role });
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", async (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) {
+        return res.status(401).json({ message: info?.message || "Credenciales inválidas" });
+      }
+      req.logIn(user, async (loginErr) => {
+        if (loginErr) return next(loginErr);
+        const { org, role } = await getOrgCtx(user.id);
+        return res.json({ id: user.id, email: user.email, name: user.name, org, role });
+      });
+    })(req, res, next);
   });
 
   app.post("/api/auth/register", async (req, res) => {
-    res.status(201).json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo" });
+    try {
+      const { email, password, name } = z
+        .object({ email: z.string().email(), password: z.string().min(6), name: z.string().optional() })
+        .parse(req.body);
+
+      const [existing] = await db.select().from(users).where(eq(users.email, email)).limit(1);
+      if (existing) return res.status(400).json({ message: "El correo ya está registrado" });
+
+      const hash = await bcrypt.hash(password, 10);
+      const [newUser] = await db
+        .insert(users)
+        .values({ email, password: hash, name: name ?? null, plan: "FREE" })
+        .returning();
+
+      req.logIn({ id: newUser.id, email: newUser.email, name: newUser.name, plan: newUser.plan }, (err) => {
+        if (err) return res.status(500).json({ message: "Error al crear sesión" });
+        return res.status(201).json({ id: newUser.id, email: newUser.email, name: newUser.name });
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ message: err.errors[0]?.message || "Datos inválidos" });
+      return res.status(500).json({ message: "Error interno" });
+    }
   });
 
-  app.post("/api/auth/logout", (_req, res) => {
-    res.json({ message: "ok" });
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout(() => {
+      res.json({ message: "ok" });
+    });
   });
 
   // ──────────────────────────────────────────
