@@ -6,7 +6,8 @@ Full-stack legal AI SaaS platform for Costa Rica built with React + Express + Po
 ## Architecture
 - **Frontend**: React + Vite, TypeScript, TailwindCSS, shadcn/ui, Wouter routing, TanStack Query
 - **Backend**: Express.js (TypeScript), Drizzle ORM, PostgreSQL + pgvector
-- **AI**: OpenAI (gpt-4o-mini + text-embedding-3-small via Replit AI Integrations)
+- **AI**: OpenAI (gpt-4o-mini via Replit AI Integrations)
+- **Legal Search**: PostgreSQL FTS (plainto_tsquery Spanish stemming) — Replit AI proxy does not support /embeddings
 
 ## Key Routes
 
@@ -55,7 +56,7 @@ Currently using demo user (`DEMO_USER_ID = "00000000-0000-0000-0000-000000000001
 2. **RBAC** — `RequireRole` component gates routes by role rank (admin > senior > assistant > intern); sidebar hides Analytics/Team for non-admins; server enforces `hasRoleAtLeast()` on org endpoints
 3. **Team Management** — `/dashboard/team` (admin only): list members, change roles, remove with confirm dialog, invite by email (generates invite link), pending invites list
 4. **Org-scoped Data** — all list queries (cases, documents, appeals, conversations, deadlines) filter by `orgId` when user belongs to an org; new records include `orgId`
-5. **AI Chat** — RAG over 10,097 chunks of Costa Rican legal normative with legal area filters
+5. **AI Chat** — RAG over 4,481 chunks of 8 Costa Rican legal codes via PostgreSQL FTS (Spanish stemming); retrieval uses `plainto_tsquery` + `ts_rank` with ILIKE fallback; files ingested: Constitución Política, Código Civil, Código Penal, Código Procesal Penal, Código de Comercio, Ley General Administración Pública, Ley RAC, Ley de Tránsito 9078; ingestion script at `scripts/ingest-legal-docs.ts`
 6. **Document Analysis** — PDF/DOCX upload → AI structured analysis (parties, risks, omissions)
 7. **Appeal Generator** — 5-step wizard with streaming output, edit-in-editor, copy/download
 8. **Document Editor** — Tiptap editor with 30s autosave, version history (max 10), DOCX export

@@ -45,35 +45,68 @@ function hasRoleAtLeast(role: string | null, required: string): boolean {
   return (ROLE_RANK[role ?? ""] ?? 0) >= (ROLE_RANK[required] ?? 99);
 }
 
-async function vectorSearch(queryText: string, materias?: string[], limit = 5) {
+/**
+ * Legal document retrieval using PostgreSQL full-text search (Spanish).
+ * Uses plainto_tsquery for natural language queries + ts_rank for relevance.
+ * Falls back to ILIKE if FTS returns no results.
+ */
+async function vectorSearch(queryText: string, materias?: string[], limit = 5): Promise<any[]> {
   try {
-    const embeddingResp = await openai.embeddings.create({
-      model: "text-embedding-3-small",
-      input: queryText,
-    });
-    const embedding = embeddingResp.data[0].embedding;
-    const embeddingArray = `[${embedding.join(",")}]`;
+    const hasMaterias = materias && materias.length > 0;
 
-    if (materias && materias.length > 0) {
-      const materiasLiteral = materias.map(m => `'${m.replace(/'/g, "''")}'`).join(",");
-      return await db.execute(sql`
+    // Primary: full-text search with Spanish stemming
+    let rows: any[];
+    if (hasMaterias) {
+      const materiasLiteral = materias!.map(m => `'${m.replace(/'/g, "''")}'`).join(",");
+      const result = await db.execute(sql`
         SELECT fuente, materia, articulo, contenido,
-          1 - (embedding <=> ${embeddingArray}::vector) as score
+          ts_rank(to_tsvector('spanish', contenido), plainto_tsquery('spanish', ${queryText})) AS score
         FROM documents
-        WHERE materia = ANY(ARRAY[${sql.raw(materiasLiteral)}])
-        ORDER BY embedding <=> ${embeddingArray}::vector
+        WHERE to_tsvector('spanish', contenido) @@ plainto_tsquery('spanish', ${queryText})
+          AND materia = ANY(ARRAY[${sql.raw(materiasLiteral)}])
+        ORDER BY score DESC
         LIMIT ${limit}
       `);
+      rows = Array.isArray(result) ? result : (result as any).rows ?? [];
+    } else {
+      const result = await db.execute(sql`
+        SELECT fuente, materia, articulo, contenido,
+          ts_rank(to_tsvector('spanish', contenido), plainto_tsquery('spanish', ${queryText})) AS score
+        FROM documents
+        WHERE to_tsvector('spanish', contenido) @@ plainto_tsquery('spanish', ${queryText})
+        ORDER BY score DESC
+        LIMIT ${limit}
+      `);
+      rows = Array.isArray(result) ? result : (result as any).rows ?? [];
     }
-    return await db.execute(sql`
-      SELECT fuente, materia, articulo, contenido,
-        1 - (embedding <=> ${embeddingArray}::vector) as score
-      FROM documents
-      ORDER BY embedding <=> ${embeddingArray}::vector
-      LIMIT ${limit}
-    `);
+
+    // Fallback: if FTS returns nothing, try keyword ILIKE search
+    if (rows.length === 0) {
+      const likePattern = `%${queryText.substring(0, 60)}%`;
+      if (hasMaterias) {
+        const materiasLiteral = materias!.map(m => `'${m.replace(/'/g, "''")}'`).join(",");
+        const result = await db.execute(sql`
+          SELECT fuente, materia, articulo, contenido, 0.1::float AS score
+          FROM documents
+          WHERE contenido ILIKE ${likePattern}
+            AND materia = ANY(ARRAY[${sql.raw(materiasLiteral)}])
+          LIMIT ${limit}
+        `);
+        rows = Array.isArray(result) ? result : (result as any).rows ?? [];
+      } else {
+        const result = await db.execute(sql`
+          SELECT fuente, materia, articulo, contenido, 0.1::float AS score
+          FROM documents
+          WHERE contenido ILIKE ${likePattern}
+          LIMIT ${limit}
+        `);
+        rows = Array.isArray(result) ? result : (result as any).rows ?? [];
+      }
+    }
+
+    return rows;
   } catch (e) {
-    console.error("Vector search error:", e);
+    console.error("Legal search error:", e);
     return [];
   }
 }
