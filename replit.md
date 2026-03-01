@@ -72,6 +72,33 @@ Currently using demo user (`DEMO_USER_ID = "00000000-0000-0000-0000-000000000001
 - `DROPBOX_SIGN_API_KEY` — Optional; enables real Dropbox Sign API
 - `SESSION_SECRET` — Session secret
 
+## Mobile App (Expo)
+The `mobile/` directory contains a React Native companion app built with Expo SDK 51. It's designed to run locally on the developer's machine (not in Replit).
+
+### Mobile Tech Stack
+- Expo SDK 51 (managed workflow) + Expo Router (file-based routing)
+- NativeWind (Tailwind for React Native) + TypeScript
+- React Query + Zustand (state management)
+- Expo SecureStore (JWT token storage)
+
+### Mobile Screens
+| Path | Screen | Description |
+|------|--------|-------------|
+| `app/login.tsx` | Login | Email/password auth |
+| `app/register-firm.tsx` | Register Firm | Firm onboarding wizard |
+| `app/(tabs)/dashboard/` | Dashboard | Metrics, recent cases, quick actions |
+| `app/(tabs)/chat/` | Chat | RAG legal chat with area filters |
+| `app/(tabs)/cases/` | Cases | Case list + detail + create |
+| `app/(tabs)/documents/` | Documents | Document list + detail |
+| `app/(tabs)/settings/` | Settings | Profile, org, logout |
+
+### Running Locally
+```bash
+cd mobile
+npm install
+EXPO_PUBLIC_API_URL=http://localhost:5000 npx expo start
+```
+
 ## Development Notes
 - PDF parsing: uses `pdf-parse` via CommonJS `require()` (ESM workaround)
 - Vector search may fail silently if pgvector extension not loaded; chat still works
