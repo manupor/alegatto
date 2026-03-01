@@ -1,0 +1,320 @@
+Build a full-stack legal AI SaaS app called "LexAI CR" (Costa Rica legal assistant).
+ 
+## TECH STACK
+- Next.js 15 (App Router), TypeScript, Tailwind CSS
+- shadcn/ui components, Lucide icons, Framer Motion animations
+- Prisma ORM + Neon Postgres (with pgvector extension)
+- NextAuth.js v4 for authentication (Google + Email/Password)
+- OpenAI API (gpt-4o-mini for chat, text-embedding-3-small for RAG)
+- Tiptap rich text editor
+- @react-pdf/renderer for PDF export, docx library for Word export
+- Dropbox Sign API (hellosign) for e-signatures
+- Sonner for toast notifications
+ 
+## DARK THEME
+- Background: #0f172a
+- Cards/panels: #1e293b
+- Accent green: #10B981 (emerald-500)
+- Text: white / slate-300 / slate-400
+- Borders: slate-700/slate-800
+ 
+---
+ 
+## DATABASE SCHEMA (Prisma)
+ 
+### Existing tables (DO NOT migrate, already seeded):
+- `documents` table (Python-created, has pgvector embeddings):
+  - id, fuente, materia, articulo, contenido, embedding vector(1536)
+  - Contains 10,097 chunks from Costa Rica legal codes
+  - Map via Prisma: model RawDocument { @@map("documents") }
+ 
+### Prisma models to create:
+```prisma
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?
+  plan          String    @default("FREE")
+  conversations Conversation[]
+  documents     Document[]
+  documentEditors DocumentEditor[]
+  accounts      Account[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+}
+ 
+model Conversation {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String    @default("Nueva consulta")
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+ 
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String
+  content        String       @db.Text
+  tokensUsed     Int          @default(0)
+  createdAt      DateTime     @default(now())
+}
+ 
+model DocumentEditor {
+  id            String            @id @default(cuid())
+  userId        String
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  titulo        String
+  contenidoHtml String            @db.Text
+  tipo          String            @default("otro")  // apelacion|contrato|escrito|otro
+  estado        String            @default("borrador") // borrador|revision|firmado
+  versions      DocumentVersion[]
+  firmaRequests FirmaRequest[]
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+}
+ 
+model DocumentVersion {
+  id            String         @id @default(cuid())
+  documentId    String
+  document      DocumentEditor @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  contenidoHtml String         @db.Text
+  createdAt     DateTime       @default(now())
+}
+ 
+model FirmaRequest {
+  id                 String         @id @default(cuid())
+  documentId         String
+  document           DocumentEditor @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  signatureRequestId String?
+  firmantes          Json
+  estado             String         @default("pendiente") // pendiente|firmado|cancelado
+  pdfFirmadoUrl      String?
+  createdAt          DateTime       @default(now())
+  completadoAt       DateTime?
+}
+ 
+model RawDocument {
+  id        String                       @id
+  fuente    String
+  materia   String
+  articulo  String?
+  contenido String
+  embedding Unsupported("vector(1536)")?
+  @@map("documents")
+}
+ENVIRONMENT VARIABLES NEEDED
+DATABASE_URL=           # Neon postgres connection string (has pgvector)
+NEXTAUTH_SECRET=
+NEXTAUTH_URL=
+OPENAI_API_KEY=
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+DROPBOX_SIGN_API_KEY=   # Optional, for e-signatures
+APP STRUCTURE
+app/
+  layout.tsx                          # Root layout with Sonner Toaster
+  dashboard/
+    layout.tsx                        # Dashboard layout with sidebar
+    page.tsx                          # AI Chat page
+    documentos/page.tsx               # Document list (Module C)
+    editor/[documentId]/page.tsx      # Tiptap editor (Module A)
+    documents/page.tsx                # File upload panel
+    profile/page.tsx                  # User settings
+api/
+  auth/[...nextauth]/route.ts         # NextAuth config
+  chat/route.ts                       # AI chat with RAG
+  conversations/route.ts              # List conversations
+  conversations/[id]/route.ts         # Get/delete conversation
+  search-normativa/route.ts           # Vector similarity search
+  editor/documents/route.ts           # List/create documents
+  editor/documents/[id]/route.ts      # Get/update/delete document
+  editor/documents/[id]/versions/route.ts
+  editor/documents/[id]/versions/[versionId]/restore/route.ts
+  editor/export/pdf/route.ts
+  editor/export/docx/route.ts
+  firma/enviar/route.ts               # Send to Dropbox Sign
+  firma/webhook/route.ts              # Dropbox Sign webhook
+  firma/[documentId]/status/route.ts  # Firma status
+components/
+  dashboard/dashboard-sidebar.tsx
+  editor/EditorToolbar.tsx
+  editor/VersionsDrawer.tsx
+  editor/FirmaModal.tsx
+  editor/FirmaStatusPanel.tsx
+  ui/                                 # shadcn components
+lib/
+  prisma.ts                           # Prisma singleton
+  pdf-template.tsx                    # @react-pdf/renderer legal template
+types/
+  editor.ts                           # TypeScript interfaces
+MODULE A: LEGAL DOCUMENT EDITOR
+Route: /dashboard/editor/[documentId]
+
+Features:
+
+Tiptap editor with: StarterKit, Underline, TextAlign, Typography extensions
+Full toolbar: undo/redo, H1/H2/H3, bold/italic/underline/strike, bullet/ordered lists, indent/outdent, align left/center/right/justify
+Autosave every 30 seconds (compare current vs last saved HTML)
+Manual save button creates a version snapshot
+Max 10 versions per document (delete oldest when exceeded)
+Version history drawer (right side, framer-motion slide-in):
+Lists all versions with date/preview
+Restore button for each version
+Export dropdown: PDF (@react-pdf/renderer) and DOCX (docx library)
+PDF format: LexAI CR header (green), document title centered uppercase, serif font, 2.5cm margins, page footer with page number and date
+"Enviar a firmar" button (hidden if estado === 'firmado')
+Word count in footer bar
+Header shows: back button, doc title, estado badge, save/export/firma buttons
+Firma Modal (Framer Motion):
+
+Add up to 3 signers (nombre + email each)
+On submit: export PDF → POST /api/firma/enviar with { documentoId, firmantes, pdfBase64 }
+Shows loading state
+Firma Status Panel (shown when firmaRequests exist):
+
+Shows estado badge (pendiente/firmado/cancelado)
+Lists each firmante with status icon + "Recordar" button
+Completado date if signed
+Link to signed PDF if available
+MODULE B: E-SIGNATURE API
+POST /api/firma/enviar:
+
+Auth check
+Find document by id + userId
+Call Dropbox Sign API (https://api.hellosign.com/v3/signature_request/send)
+Send PDF as file attachment + signer list
+Save FirmaRequest to DB
+Update document estado → 'revision'
+POST /api/firma/webhook:
+
+Parse event_type from Dropbox Sign payload
+On 'signature_request_all_signed': update FirmaRequest.estado → 'firmado', save pdfFirmadoUrl, update DocumentEditor.estado → 'firmado'
+On 'signature_request_canceled': update estado → 'cancelado'
+MODULE C: DOCUMENTS PANEL
+Route: /dashboard/documentos
+
+Features:
+
+KPI row: Total / Borradores / En revisión / Firmados
+Search by title (Input with Search icon)
+Filter toggle showing: tipo dropdown, estado dropdown, desde/hasta date inputs
+Document grid (3 cols desktop, 2 tablet, 1 mobile)
+Each card shows: title, modified date, tipo badge, estado badge, hover action menu (edit, download PDF, download Word, send to sign, delete)
+"+" dashed card at end to create new document
+Skeleton loaders while fetching
+Framer Motion staggered card animation
+POST /api/editor/documents creates document and redirects to editor.
+
+AI CHAT WITH RAG
+Route: /dashboard (main page) POST /api/chat:
+
+Load conversation history from DB (last 8 messages)
+Generate embedding for user query (text-embedding-3-small)
+Vector search on documents table using neon() direct SQL:
+sql
+SELECT fuente, materia, articulo, contenido,
+  1 - (embedding <=> '[...]'::vector) as score
+FROM documents
+ORDER BY embedding <=> '[...]'::vector
+LIMIT 5
+Build context string from top results
+Call gpt-4o-mini with system prompt as Costa Rica legal expert
+Stream response back (useChat or manual SSE)
+Save user + assistant messages to DB
+POST /api/search-normativa (standalone search endpoint):
+
+Receives { query, materias, topK }
+Uses neon() tagged template SQL with pgvector
+Returns { results: [{ fuente, materia, articulo, contenido, score }] }
+Uses materias filter if provided: WHERE materia = ANY($materias::text[])
+SIDEBAR NAVIGATION
+Links (with active state gradient highlight):
+
+Nueva Consulta → /dashboard (blue gradient)
+Documentos → /dashboard/documents (blue gradient)
+Editor Legal → /dashboard/documentos (emerald gradient, active for /dashboard/editor too)
+Gestión Legal → /dashboard/cases (ENTERPRISE only, emerald gradient)
+Configuración → /dashboard/profile (bottom)
+Recent conversations list (last 5, fetched from /api/conversations).
+
+NEXT.CONFIG.TS
+ts
+const nextConfig = {
+  serverExternalPackages: ['@react-pdf/renderer', 'canvas'],
+}
+KEY IMPLEMENTATION DETAILS
+Prisma singleton (lib/prisma.ts):
+
+ts
+import { PrismaClient } from '@prisma/client'
+declare global { var prisma: PrismaClient | undefined }
+export const prisma = global.prisma ?? new PrismaClient()
+if (process.env.NODE_ENV !== 'production') global.prisma = prisma
+neon() usage (always instantiate per-request in serverless):
+
+ts
+import { neon } from '@neondatabase/serverless'
+const sql = neon(process.env.DATABASE_URL!)
+const rows = await sql`SELECT ... FROM documents WHERE ...`
+Versioning logic (on PUT /api/editor/documents/[id]):
+
+ts
+// Count existing versions
+const count = await prisma.documentVersion.count({ where: { documentId: id } })
+if (count >= 10) {
+  // Delete oldest
+  const oldest = await prisma.documentVersion.findFirst({
+    where: { documentId: id }, orderBy: { createdAt: 'asc' }
+  })
+  await prisma.documentVersion.delete({ where: { id: oldest.id } })
+}
+// Create new version from current content before saving
+await prisma.documentVersion.create({
+  data: { documentId: id, contenidoHtml: existingDoc.contenidoHtml }
+})
+PDF export (lib/pdf-template.tsx using @react-pdf/renderer):
+
+Legal header: "LexAI CR" in green, "Documento Legal" subtitle
+Title: uppercase, centered, Times-Bold 16pt
+Body: Times-Roman 11pt, justified, 1.7 line height
+Footer (fixed): "LexAI CR — Documento generado electrónicamente" + page X of Y
+Page size: LETTER, margins: 71pt all sides (~2.5cm)
+TypeScript types (types/editor.ts):
+
+ts
+export type DocumentTipo = 'apelacion' | 'contrato' | 'escrito' | 'otro'
+export type DocumentEstado = 'borrador' | 'revision' | 'firmado'
+export interface Firmante { nombre: string; email: string }
+export interface DocumentEditor {
+  id: string; userId: string; titulo: string
+  contenidoHtml: string; tipo: string; estado: string
+  versions?: DocumentVersion[]; firmaRequests?: FirmaRequest[]
+  createdAt: string; updatedAt: string
+}
+export interface DocumentVersion {
+  id: string; documentId: string
+  contenidoHtml: string; createdAt: string
+}
+export interface FirmaRequest {
+  id: string; documentId: string
+  signatureRequestId?: string; firmantes: Firmante[]
+  estado: string; pdfFirmadoUrl?: string
+  createdAt: string; completadoAt?: string
+}
+PACKAGES TO INSTALL
+npm install @tiptap/react @tiptap/pm @tiptap/starter-kit @tiptap/extension-underline @tiptap/extension-text-align @tiptap/extension-typography
+npm install @react-pdf/renderer docx
+npm install sonner framer-motion
+npm install @neondatabase/serverless
+npm install next-auth @auth/prisma-adapter
+npm install openai
+npx shadcn@latest add button input card badge dropdown-menu dialog separator scroll-area tabs select
+Build everything end-to-end, fully functional. Prioritize functionality over perfect styling. All UI must use the dark theme. Use sonner toasts for all error/success feedback.
+
