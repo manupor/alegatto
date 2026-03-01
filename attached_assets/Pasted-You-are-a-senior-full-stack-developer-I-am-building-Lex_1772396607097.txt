@@ -1,0 +1,262 @@
+You are a senior full stack developer. I am building LexAI CR,
+a legal SaaS platform for Costa Rica. The following already exists:
+- Auth with Replit Auth
+- Chat with RAG over 10,097 chunks of Costa Rican legal normative
+- Basic TipTap editor
+- Mocked e-signature flow
+- Dark theme: #0f172a background, #1e293b cards, #10B981 green accent
+
+Build everything below in strict priority order.
+Do NOT move to the next priority until the current one works end-to-end.
+
+═══════════════════════════════════════
+PRIORITY 1 — DOCUMENT ANALYSIS + APPEAL GENERATOR
+═══════════════════════════════════════
+
+MODULE A: DOCUMENT ANALYSIS
+Page: /dashboard/analysis
+
+1. Drag-and-drop upload for PDF or DOCX (use react-dropzone)
+2. On upload, extract text and send to LLM with this exact system prompt:
+"You are an expert legal assistant specializing in Costa Rican law.
+Analyze the following legal document and respond ONLY with valid JSON:
+{
+  parties: { plaintiff: string, defendant: string },
+  claims: string[],
+  facts: string[],
+  legal_basis: string[],
+  detected_omissions: string[],
+  procedural_risk: {
+    level: 'low' | 'medium' | 'high',
+    reasons: string[],
+    recommendations: string[]
+  },
+  relevant_articles: string[],
+  executive_summary: string
+}"
+3. Display results with:
+   - Card: executive summary
+   - Risk badge: green(low) / yellow(medium) / red(high)
+   - Collapsible sections: Parties, Claims, Facts, Legal Basis
+   - Highlighted section: Detected Omissions (⚠️ icon)
+   - Button: "Export analysis as PDF"
+   - Button: "Create case from this document"
+
+MODULE B: GUIDED APPEAL GENERATOR
+Page: /dashboard/appeals/new
+
+5-step visual stepper with progress indicator:
+
+STEP 1 — Process type:
+Select: Civil | Labor | Criminal | Administrative | Constitutional
+
+STEP 2 — Challenged resolution:
+- Input: Resolving court/body
+- Select: Judgment / Order / Interlocutory resolution
+- Input: Case file number
+- Input: Resolution date
+
+STEP 3 — Grievances:
+- Button "Add grievance"
+- Per grievance: title input + description textarea
+- Min 1, max 10 grievances
+- Drag to reorder
+
+STEP 4 — Automatic legal basis:
+- On arriving at this step, automatically call POST /api/search-normativa
+  with query = concatenated grievances, materias = [selected process type]
+- Show suggested articles with checkboxes (user selects which to include)
+- Input for manual jurisprudence the lawyer wants to add
+
+STEP 5 — Document configuration:
+- Radio: Basic / Technical / Expert (writing style)
+- Input: Lawyer full name
+- Input: Bar Association membership number (Colegio de Abogados CR)
+- Input: Destination court
+
+OUTPUT — Generated document:
+- Call POST /api/generate-appeal with all collected data
+- LLM system prompt:
+  "Generate a formal Costa Rican appeal document with this structure:
+   - Header: city, date, destination court
+   - Party identification and case file number
+   - Each grievance numbered with: facts, legal basis, cited articles
+   - Formal petition section ('POR TANTO' / 'THEREFORE')
+   - Signature block with lawyer name and bar number
+   Use formal Costa Rican legal language. Be technically precise."
+- Show generated document in right panel with streaming (typewriter effect)
+- Buttons: Copy / Edit in editor / Download PDF / Download DOCX
+- Save to DB table: appeals(id, user_id, process_type, case_number,
+  grievances jsonb, generated_document text, created_at)
+
+═══════════════════════════════════════
+PRIORITY 2 — COMPLETE PHASE 3: EDITOR + REAL E-SIGNATURE
+═══════════════════════════════════════
+
+IMPROVE EXISTING TIPTAP EDITOR:
+- Real auto-save every 30 seconds with visual indicator "Saving..." / "Saved ✓"
+- Versioning: save previous version to DB before each save (max 10 versions)
+  Table: document_versions(id, document_id, content_html, created_at)
+- Side drawer "Version history" with date/time list and "Restore" button per version
+- Export PDF: use @react-pdf/renderer with legal formatting:
+  * Margins: 2.5cm all sides
+  * Serif font for content
+  * Header: "LexAI CR | Legal Document"
+  * Footer: page number + generation date
+- Export DOCX: use docx library
+- Word count displayed in editor footer
+
+REPLACE MOCKED E-SIGNATURE WITH REAL DROPBOX SIGN:
+Use Dropbox Sign REST API directly with fetch (no SDK).
+API base URL: https://api.hellosign.com/v3
+
+Endpoint POST /api/signature/send:
+- Receive: { documentBase64: string, signers: [{name: string, email: string}] }
+- Call Dropbox Sign API to create signature_request
+- Save to DB: firma_requests(id, document_id, signature_request_id,
+  signers jsonb, status varchar, created_at, completed_at, signed_pdf_url)
+- Return: { signatureRequestId, signingUrls[] }
+
+Webhook POST /api/signature/webhook:
+- Receive Dropbox Sign completion notification
+- Download signed PDF
+- Update DB status to 'signed'
+- Store signed PDF URL
+
+UI in editor:
+- Status badge: Draft / Pending Signature / Signed
+- "Send to sign" button (disabled if already signed)
+- Modal: add signers (name + email), up to 3 signers
+- Signers list with individual status (pending/signed + date)
+- "Resend reminder" button per signer
+
+═══════════════════════════════════════
+PRIORITY 3 — PHASE 4: MULTI-TENANT
+═══════════════════════════════════════
+
+Convert LexAI CR into a multi-tenant SaaS platform.
+
+DB SCHEMA (add to existing):
+- organizations: id, name, slug, plan(free|pro|enterprise), active, created_at
+- org_members: id, org_id, user_id, role(admin|senior|assistant|intern), created_at
+- Add org_id column to: cases, documents, appeals, conversations
+
+ROLES AND PERMISSIONS:
+- admin: full management, metrics, invite/remove members, billing
+- senior: create/edit/delete all cases and documents in org
+- assistant: create/edit own cases, view assigned documents
+- intern: read-only on assigned cases
+
+ONBOARDING:
+Page /register-firm:
+- Input: Law firm name
+- Input: slug (unique identifier, auto-suggested from name)
+- Select: plan (Free / Pro / Enterprise)
+- On submit: create organization + assign current user as admin
+- Redirect to dashboard
+
+TEAM MANAGEMENT:
+Page /dashboard/team:
+- Members list with role badge and join date
+- Button "Invite member": input email + select role → send invite email
+- Change role dropdown per member
+- Remove member button (with confirmation)
+- Pending invitations section
+
+═══════════════════════════════════════
+PRIORITY 4 — PHASE 5: DASHBOARD + CASE MANAGEMENT
+═══════════════════════════════════════
+
+MAIN DASHBOARD /dashboard:
+
+Metric cards (top row):
+- Total active cases
+- Documents generated this month
+- Chat queries this month
+- Most consulted legal area (badge)
+- Average procedural risk (visual gauge: low/medium/high)
+
+CASE MANAGEMENT /dashboard/cases:
+Table with columns:
+- Case name
+- Client name
+- Legal area (badge: Civil/Labor/Criminal/Administrative)
+- Status badge: Active(blue) / In Appeal(yellow) / Closed(gray) / Archived(dark)
+- Last activity date
+- Assigned lawyer
+- Actions: View, Edit, Archive
+
+Filters: by legal area, by status, by date range, search by name
+Export to CSV button
+
+CASE DETAIL /dashboard/cases/[id]:
+- Info card: client, legal area, case number, start date, assigned lawyer
+- Procedural timeline: ordered list of events with date + description
+  * Button "Add event" to append to timeline
+- Associated documents list with status badges
+- Linked chat queries (conversations tagged to this case)
+- Internal notes section (private to the firm)
+- Button: "Generate appeal for this case" → pre-fills appeal generator
+
+ALERTS /dashboard/alerts:
+- Upcoming procedural deadlines list
+- Color coding: green(>15 days) / yellow(7-15 days) / red(<7 days)
+- "Mark as handled" button per alert
+- Button "Add deadline" with date picker
+
+ANALYTICS PAGE /dashboard/analytics (admin only):
+- Line chart: queries per week (last 12 weeks) — use recharts
+- Bar chart: most consulted legal areas
+- Table: activity per lawyer (queries, documents, appeals generated)
+- Pie chart: document types distribution
+
+═══════════════════════════════════════
+PRIORITY 5 — CHAT FILTER FIX
+═══════════════════════════════════════
+
+In the existing chat interface, add above the input:
+- Multi-select for legal areas:
+  Criminal | Civil | Labor | Commercial | Constitutional |
+  Administrative | Criminal Procedure | Civil Procedure | Traffic
+- Default: all areas selected
+- Selected areas are sent in the payload to /api/search-normativa
+  as the "materias" array
+- Show active filter count as a badge on the filter button
+
+═══════════════════════════════════════
+GENERAL REQUIREMENTS
+═══════════════════════════════════════
+
+UI/UX:
+- Consistent dark theme throughout: #0f172a bg, #1e293b cards, #10B981 accent
+- Sidebar navigation with Lucide icons for all new pages
+- Skeleton loaders on all data-fetching sections
+- Toast notifications using sonner
+- Mobile responsive (all pages work on mobile)
+- Smooth animations with framer-motion on modals, drawers, steppers
+
+DATABASE (add to existing schema):
+- appeals(id, user_id, org_id, process_type, case_number,
+  grievances jsonb, generated_document text, created_at)
+- cases(id, org_id, name, client, legal_area, status,
+  case_number, assigned_lawyer_id, created_at, updated_at)
+- case_events(id, case_id, description, event_date, created_by)
+- case_notes(id, case_id, content, created_by, created_at)
+- document_versions(id, document_id, content_html, created_at)
+- firma_requests(id, document_id, signature_request_id,
+  signers jsonb, status, created_at, completed_at, signed_pdf_url)
+- organizations(id, name, slug, plan, active, created_at)
+- org_members(id, org_id, user_id, role, created_at)
+- deadlines(id, case_id, org_id, description, due_date,
+  status(pending|handled), created_at)
+
+Build in this exact order:
+1. Document analysis module (Module A)
+2. Appeal generator (Module B)
+3. Editor improvements + real e-signature
+4. Multi-tenant (organizations + roles)
+5. Dashboard + case management
+6. Chat filter fix
+
+Do NOT skip steps. Complete each module end-to-end before moving on.
+Confirm after each module is done before starting the next.
