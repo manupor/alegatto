@@ -1,0 +1,151 @@
+Build LexAI CR mobile app using React Native with Expo.
+This is the mobile companion to the LexAI CR web platform.
+Backend API is already built at https://lexai.cr (Next.js).
+
+TECH STACK:
+- Expo SDK 51 (managed workflow)
+- React Native with TypeScript
+- NativeWind (Tailwind for React Native)
+- Expo Router (file-based routing)
+- React Query (data fetching)
+- Zustand (state management)
+- Expo SecureStore (token storage)
+
+COLOR THEME:
+- Background: #0f172a
+- Cards: #1e293b  
+- Accent: #10B981 (emerald green)
+- Text: #f8fafc
+- Muted: #64748b
+
+SCREENS TO BUILD:
+
+AUTH:
+- screens/login.tsx: Google OAuth login button (Expo AuthSession)
+  and email/password form. On success store JWT in SecureStore.
+- screens/register-firm.tsx: same onboarding flow as web
+
+BOTTOM TAB NAVIGATOR (5 tabs):
+1. 🏠 Dashboard
+2. 💬 Chat  
+3. 📁 Cases
+4. 📄 Documents
+5. ⚙️ Settings
+
+TAB 1 — DASHBOARD (screens/dashboard/index.tsx):
+- Greeting: "Buenos días, [nombre]"
+- Metric cards (horizontal scroll):
+  * Active cases count
+  * Documents this month
+  * Pending signatures
+  * Urgent alerts (red badge)
+- Recent cases list (last 5)
+- Quick actions row: New Case / New Appeal / Upload Doc / Chat
+- Upcoming deadlines (next 3, color coded)
+
+TAB 2 — CHAT (screens/chat/index.tsx):
+- Full chat interface with the RAG backend
+- Messages list with user/assistant bubble styles
+- Legal area filter: horizontal scroll of chips at top
+  (Criminal, Civil, Labor, Commercial, Constitutional...)
+- Text input with send button at bottom
+- Each assistant message shows source articles cited
+- "Copy response" long-press action on assistant messages
+- Typing indicator while streaming
+
+TAB 3 — CASES (screens/cases/index.tsx):
+- Search bar at top
+- Filter chips: All / Active / In Appeal / Closed
+- Case cards list with:
+  * Case name + legal area badge
+  * Client name
+  * Status badge (color coded)
+  * Last activity date
+  * Arrow chevron
+- FAB (Floating Action Button) to create new case
+
+screens/cases/[id].tsx — Case detail:
+- Header with case name and status badge
+- Info card: client, area, case number, lawyer
+- Tabs: Timeline | Documents | Notes
+- Timeline tab: vertical timeline with events
+- Documents tab: list of docs with download button
+- Notes tab: internal notes with add note button
+- Bottom button: "Generate Appeal"
+
+TAB 4 — DOCUMENTS (screens/documents/index.tsx):
+- Filter by type: All / Appeals / Contracts / Other
+- Document cards: title, type badge, status badge, date
+- Status badges: Draft / Pending Signature / Signed
+- Tap to view document (WebView for PDF preview)
+- Swipe left actions: Download / Delete
+
+screens/documents/[id].tsx:
+- PDF viewer using expo-file-system + WebView
+- Signature status section with signer list
+- Download button (saves to device)
+- Share button (native share sheet)
+
+TAB 5 — SETTINGS (screens/settings/index.tsx):
+- Profile section: avatar, name, email, bar number
+- Organization section: firm name, plan badge, member count
+- Notifications toggle (push notifications)
+- Theme (dark only for now)
+- Logout button
+
+APPEAL GENERATOR (modal/appeal-generator.tsx):
+- Accessible from Dashboard quick actions and Case detail
+- Same 5-step flow as web but optimized for mobile:
+  Step 1: Process type (large radio buttons)
+  Step 2: Resolution details (form fields)
+  Step 3: Grievances (add/remove cards)
+  Step 4: Auto-suggested articles (checkbox list)
+  Step 5: Configuration + Generate
+- Generated document shown in scrollable text view
+- Share button → native share sheet (PDF)
+- "Save to case" button
+
+DOCUMENT UPLOAD (modal/upload-document.tsx):
+- Pick from: Camera / Photo Library / Files
+- Upload to /api/analyze-document
+- Show analysis results in bottom sheet
+- "Create case" button
+
+PUSH NOTIFICATIONS:
+- Use Expo Notifications
+- Notify for:
+  * Deadline approaching (1 week before, 1 day before)
+  * Document signature completed
+  * New team member joined
+- Register push token on login and save to DB
+
+API INTEGRATION:
+Create lib/api.ts with typed fetch functions for all endpoints:
+- auth: login, logout, getSession
+- cases: list, get, create, update
+- documents: list, get, upload, download
+- chat: sendMessage (streaming with EventSource)
+- appeals: create, list
+- org: getMembers, inviteMember
+
+All requests include Authorization: Bearer {jwt} header.
+Base URL from environment: EXPO_PUBLIC_API_URL=https://lexai.cr
+
+OFFLINE SUPPORT:
+- Cache last 10 cases locally with AsyncStorage
+- Cache last 20 chat messages
+- Show "Offline" banner when no connection
+- Queue chat messages when offline, send when reconnected
+
+Build screens in this order:
+1. Auth + navigation structure
+2. Dashboard tab
+3. Chat tab (most important)
+4. Cases tab + detail
+5. Documents tab
+6. Appeal generator modal
+7. Settings + notifications
+
+Use expo-router for all navigation.
+Make everything feel native and smooth.
+Dark theme throughout, no light mode needed.
