@@ -51,14 +51,18 @@ Key tables: `users`, `conversations`, `messages`, `document_editors`, `document_
 Currently using demo user (`DEMO_USER_ID = "00000000-0000-0000-0000-000000000001"`) with stub auth endpoints. Replit Auth integration files exist in `server/replit_integrations/auth/` but not yet wired for production auth.
 
 ## Key Features Built
-1. **AI Chat** — RAG over 10,097 chunks of Costa Rican legal normative with legal area filters
-2. **Document Analysis** — PDF/DOCX upload → AI structured analysis (parties, risks, omissions)
-3. **Appeal Generator** — 5-step wizard with streaming output, edit-in-editor, copy/download
-4. **Document Editor** — Tiptap editor with 30s autosave, version history (max 10), DOCX export
-5. **E-Signature** — Dropbox Sign integration (real API if `DROPBOX_SIGN_API_KEY` set, else mocked)
-6. **Case Management** — Case list/detail with timeline events, internal notes, CSV export
-7. **Alerts** — Deadline tracking with color coding (red/yellow/green by days remaining)
-8. **Analytics** — Charts (line, bar, pie) via recharts for docs, cases, appeals
+1. **Multi-tenant Onboarding** — `/register-firm` wizard (firm name, auto-slug, plan selector); auto-redirect from `/dashboard` if no org
+2. **RBAC** — `RequireRole` component gates routes by role rank (admin > senior > assistant > intern); sidebar hides Analytics/Team for non-admins; server enforces `hasRoleAtLeast()` on org endpoints
+3. **Team Management** — `/dashboard/team` (admin only): list members, change roles, remove with confirm dialog, invite by email (generates invite link), pending invites list
+4. **Org-scoped Data** — all list queries (cases, documents, appeals, conversations, deadlines) filter by `orgId` when user belongs to an org; new records include `orgId`
+5. **AI Chat** — RAG over 10,097 chunks of Costa Rican legal normative with legal area filters
+6. **Document Analysis** — PDF/DOCX upload → AI structured analysis (parties, risks, omissions)
+7. **Appeal Generator** — 5-step wizard with streaming output, edit-in-editor, copy/download
+8. **Document Editor** — Tiptap editor with 30s autosave, version history (max 10), DOCX export
+9. **E-Signature** — Dropbox Sign integration (real API if `DROPBOX_SIGN_API_KEY` set, else mocked)
+10. **Case Management** — Case list/detail with timeline events, internal notes, CSV export
+11. **Alerts** — Deadline tracking with color coding (red/yellow/green by days remaining)
+12. **Analytics** — Charts (line, bar, pie) via recharts for docs, cases, appeals (admin only)
 
 ## Environment Variables
 - `AI_INTEGRATIONS_OPENAI_API_KEY` — OpenAI API key (set via Replit AI Integrations)

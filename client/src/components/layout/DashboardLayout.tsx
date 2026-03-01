@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { useOrgContext } from "@/hooks/use-org";
 import { Redirect } from "wouter";
 import { Loader2 } from "lucide-react";
 
@@ -9,7 +10,10 @@ interface DashboardLayoutProps {
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const { org, isLoading: orgLoading } = useOrgContext();
+
+  const isLoading = authLoading || orgLoading;
 
   if (isLoading) {
     return (
@@ -21,6 +25,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (!user) {
     return <Redirect to="/auth" />;
+  }
+
+  // If user has no org, redirect to firm registration
+  if (!org) {
+    return <Redirect to="/register-firm" />;
   }
 
   return (

@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
 import AuthPage from "@/pages/AuthPage";
+import RegisterFirmPage from "@/pages/RegisterFirmPage";
 import MainDashboardPage from "@/pages/MainDashboardPage";
 import ChatPage from "@/pages/ChatPage";
 import DocumentsPage from "@/pages/DocumentsPage";
@@ -17,12 +18,14 @@ import CasesPage from "@/pages/CasesPage";
 import CaseDetailPage from "@/pages/CaseDetailPage";
 import AlertsPage from "@/pages/AlertsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
+import TeamPage from "@/pages/TeamPage";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/register-firm" component={RegisterFirmPage} />
       <Route path="/dashboard" component={MainDashboardPage} />
       <Route path="/dashboard/chat" component={ChatPage} />
       <Route path="/dashboard/analysis" component={AnalysisPage} />
@@ -33,6 +36,7 @@ function Router() {
       <Route path="/dashboard/cases/:id" component={CaseDetailPage} />
       <Route path="/dashboard/alerts" component={AlertsPage} />
       <Route path="/dashboard/analytics" component={AnalyticsPage} />
+      <Route path="/dashboard/team" component={TeamPage} />
       <Route component={NotFound} />
     </Switch>
   );

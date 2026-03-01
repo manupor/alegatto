@@ -7,6 +7,7 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import multer from "multer";
 import mammoth from "mammoth";
+import { randomUUID } from "crypto";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const pdfParse = require("pdf-parse");
@@ -21,16 +22,27 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 
 const DEMO_USER_ID = "00000000-0000-0000-0000-000000000001";
 
 async function ensureDemoUser() {
-  let user = await storage.getUser(DEMO_USER_ID);
-  if (!user) {
-    try {
-      await db.execute(sql`
-        INSERT INTO users (id, email, password, plan, created_at)
-        VALUES (${DEMO_USER_ID}, 'demo@lexai.cr', 'demo', 'FREE', NOW())
-        ON CONFLICT (id) DO NOTHING
-      `);
-    } catch {}
-  }
+  try {
+    await db.execute(sql`
+      INSERT INTO users (id, email, password, plan, created_at)
+      VALUES (${DEMO_USER_ID}, 'demo@lexai.cr', 'demo', 'FREE', NOW())
+      ON CONFLICT (id) DO NOTHING
+    `);
+  } catch {}
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────
+
+async function getOrgCtx(userId: string) {
+  const membership = await storage.getOrgMembership(userId);
+  if (!membership) return { org: null, role: null, orgId: null };
+  return { org: membership.org, role: membership.role, orgId: membership.org.id };
+}
+
+const ROLE_RANK: Record<string, number> = { admin: 4, senior: 3, assistant: 2, intern: 1 };
+
+function hasRoleAtLeast(role: string | null, required: string): boolean {
+  return (ROLE_RANK[role ?? ""] ?? 0) >= (ROLE_RANK[required] ?? 99);
 }
 
 async function vectorSearch(queryText: string, materias?: string[], limit = 5) {
@@ -40,12 +52,11 @@ async function vectorSearch(queryText: string, materias?: string[], limit = 5) {
       input: queryText,
     });
     const embedding = embeddingResp.data[0].embedding;
-    const embeddingArray = `[${embedding.join(',')}]`;
+    const embeddingArray = `[${embedding.join(",")}]`;
 
-    let results: any[];
     if (materias && materias.length > 0) {
-      const materiasLiteral = materias.map(m => `'${m.replace(/'/g, "''")}'`).join(',');
-      results = await db.execute(sql`
+      const materiasLiteral = materias.map(m => `'${m.replace(/'/g, "''")}'`).join(",");
+      return await db.execute(sql`
         SELECT fuente, materia, articulo, contenido,
           1 - (embedding <=> ${embeddingArray}::vector) as score
         FROM documents
@@ -53,16 +64,14 @@ async function vectorSearch(queryText: string, materias?: string[], limit = 5) {
         ORDER BY embedding <=> ${embeddingArray}::vector
         LIMIT ${limit}
       `);
-    } else {
-      results = await db.execute(sql`
-        SELECT fuente, materia, articulo, contenido,
-          1 - (embedding <=> ${embeddingArray}::vector) as score
-        FROM documents
-        ORDER BY embedding <=> ${embeddingArray}::vector
-        LIMIT ${limit}
-      `);
     }
-    return results;
+    return await db.execute(sql`
+      SELECT fuente, materia, articulo, contenido,
+        1 - (embedding <=> ${embeddingArray}::vector) as score
+      FROM documents
+      ORDER BY embedding <=> ${embeddingArray}::vector
+      LIMIT ${limit}
+    `);
   } catch (e) {
     console.error("Vector search error:", e);
     return [];
@@ -71,26 +80,139 @@ async function vectorSearch(queryText: string, materias?: string[], limit = 5) {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   await ensureDemoUser();
-  
-  const getUserId = (req: any): string => DEMO_USER_ID;
+  const getUserId = (_req: any): string => DEMO_USER_ID;
 
   // ──────────────────────────────────────────
-  // AUTH STUBS (used by frontend hooks)
+  // AUTH
   // ──────────────────────────────────────────
-  app.get("/api/auth/me", (req, res) => {
-    res.json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo" });
+  app.get("/api/auth/me", async (req, res) => {
+    const userId = getUserId(req);
+    const { org, role } = await getOrgCtx(userId);
+    res.json({
+      id: userId,
+      email: "demo@lexai.cr",
+      name: "Abogado Demo",
+      org: org ? { id: org.id, name: org.name, slug: org.slug, plan: org.plan } : null,
+      role,
+    });
   });
 
   app.post("/api/auth/login", async (req, res) => {
-    res.json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo" });
+    const { org, role } = await getOrgCtx(DEMO_USER_ID);
+    res.json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo", org, role });
   });
 
   app.post("/api/auth/register", async (req, res) => {
     res.status(201).json({ id: DEMO_USER_ID, email: "demo@lexai.cr", name: "Abogado Demo" });
   });
 
-  app.post("/api/auth/logout", (req, res) => {
+  app.post("/api/auth/logout", (_req, res) => {
     res.json({ message: "ok" });
+  });
+
+  // ──────────────────────────────────────────
+  // ORG CONTEXT
+  // ──────────────────────────────────────────
+  app.get("/api/org/context", async (req, res) => {
+    const userId = getUserId(req);
+    const { org, role } = await getOrgCtx(userId);
+    res.json({
+      org: org ? { id: org.id, name: org.name, slug: org.slug, plan: org.plan } : null,
+      role,
+      isAdmin: role === "admin",
+      isSenior: role === "senior" || role === "admin",
+      canEdit: ["admin", "senior", "assistant"].includes(role ?? ""),
+      canViewAnalytics: role === "admin",
+      canManageTeam: role === "admin",
+    });
+  });
+
+  // ── Register firm (create org) ──
+  app.post("/api/org/register", async (req, res) => {
+    try {
+      const { name, slug, plan = "free" } = req.body;
+      if (!name || !slug) return res.status(400).json({ message: "name and slug required" });
+
+      const existing = await storage.getOrgBySlug(slug);
+      if (existing) return res.status(409).json({ message: "Ese identificador ya está en uso" });
+
+      const userId = getUserId(req);
+      const org = await storage.createOrg({ name, slug, plan });
+      await storage.addOrgMember({ orgId: org.id, userId, role: "admin" });
+
+      res.status(201).json({ org, role: "admin" });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  // ── Validate slug ──
+  app.get("/api/org/slug/:slug", async (req, res) => {
+    const org = await storage.getOrgBySlug(req.params.slug);
+    res.json({ available: !org });
+  });
+
+  // ── Team management (admin only) ──
+  app.get("/api/org/members", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+    const members = await storage.getOrgMembers(orgId);
+    res.json(members);
+  });
+
+  app.put("/api/org/members/:id/role", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+    const { role: newRole } = req.body;
+    if (!["admin", "senior", "assistant", "intern"].includes(newRole)) return res.status(400).json({ message: "Rol inválido" });
+    const updated = await storage.updateOrgMemberRole(req.params.id, newRole);
+    res.json(updated);
+  });
+
+  app.delete("/api/org/members/:id", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+    await storage.removeOrgMember(req.params.id);
+    res.status(204).send();
+  });
+
+  // ── Invites ──
+  app.get("/api/org/invites", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+    const invites = await storage.getOrgInvites(orgId);
+    res.json(invites);
+  });
+
+  app.post("/api/org/invite", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { orgId, role } = await getOrgCtx(userId);
+      if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+
+      const { email, role: inviteRole = "assistant" } = req.body;
+      if (!email) return res.status(400).json({ message: "email required" });
+
+      const token = randomUUID();
+      const invite = await storage.createOrgInvite({ orgId, email, role: inviteRole, token });
+      // In production, send email here; for now return the invite link
+      const inviteLink = `${req.protocol}://${req.get("host")}/invite/${token}`;
+      res.status(201).json({ invite, inviteLink });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
+  app.delete("/api/org/invites/:id", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId || !hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Acceso denegado" });
+    await storage.deleteOrgInvite(req.params.id);
+    res.status(204).send();
   });
 
   // ──────────────────────────────────────────
@@ -98,7 +220,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ──────────────────────────────────────────
   app.get("/api/conversations", async (req, res) => {
     const userId = getUserId(req);
-    const convs = await storage.getConversations(userId);
+    const { orgId } = await getOrgCtx(userId);
+    const convs = await storage.getConversations(userId, orgId ?? undefined);
     res.json(convs);
   });
 
@@ -115,7 +238,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ──────────────────────────────────────────
-  // AI CHAT WITH RAG
+  // AI CHAT
   // ──────────────────────────────────────────
   app.post("/api/chat", async (req, res) => {
     try {
@@ -123,52 +246,43 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!prompt) return res.status(400).json({ message: "prompt required" });
 
       const userId = getUserId(req);
+      const { orgId } = await getOrgCtx(userId);
       let conversationId = inputConvId;
 
       if (!conversationId) {
         const conv = await storage.createConversation({
           userId,
+          orgId: orgId ?? undefined,
           title: prompt.substring(0, 40),
         });
         conversationId = conv.id;
       }
 
       await storage.createMessage({ conversationId, role: "user", content: prompt });
-
       const msgs = await storage.getMessages(conversationId);
       const recent = msgs.slice(-8);
       const searchResults = await vectorSearch(prompt, materias, 5);
 
       let contextStr = "Contexto de normativa costarricense:\n\n";
       for (const r of searchResults as any[]) {
-        contextStr += `[${r.fuente}${r.articulo ? ' - ' + r.articulo : ''}]\n${r.contenido}\n\n`;
+        contextStr += `[${r.fuente}${r.articulo ? " - " + r.articulo : ""}]\n${r.contenido}\n\n`;
       }
 
-      const systemPrompt = `Eres LexAI CR, asistente legal experto en derecho costarricense. 
-Responde en español usando el siguiente contexto legal. Si el contexto no es suficiente, indica que debes consultar fuentes adicionales.
+      const systemPrompt = `Eres LexAI CR, asistente legal experto en derecho costarricense. Responde en español usando el siguiente contexto legal.
 ${contextStr}`;
-
-      const chatMessages = [
-        { role: "system" as const, content: systemPrompt },
-        ...recent.slice(0, -1).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
-        { role: "user" as const, content: prompt }
-      ];
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: chatMessages,
+        messages: [
+          { role: "system", content: systemPrompt },
+          ...recent.slice(0, -1).map(m => ({ role: m.role as "user" | "assistant", content: m.content })),
+          { role: "user", content: prompt },
+        ],
         max_tokens: 2000,
       });
 
       const responseText = completion.choices[0]?.message?.content || "Lo siento, no pude generar una respuesta.";
-
-      await storage.createMessage({
-        conversationId,
-        role: "assistant",
-        content: responseText,
-        tokensUsed: completion.usage?.total_tokens || 0,
-      });
-
+      await storage.createMessage({ conversationId, role: "assistant", content: responseText, tokensUsed: completion.usage?.total_tokens || 0 });
       res.json({ response: responseText, conversationId });
     } catch (err: any) {
       console.error("Chat error:", err);
@@ -177,7 +291,7 @@ ${contextStr}`;
   });
 
   // ──────────────────────────────────────────
-  // VECTOR SEARCH (normativa)
+  // VECTOR SEARCH
   // ──────────────────────────────────────────
   app.post("/api/search-normativa", async (req, res) => {
     try {
@@ -191,92 +305,71 @@ ${contextStr}`;
   });
 
   // ──────────────────────────────────────────
-  // DOCUMENT ANALYSIS (Module A)
+  // DOCUMENT ANALYSIS
   // ──────────────────────────────────────────
   app.post("/api/analyze-document", upload.single("file"), async (req, res) => {
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
 
       let extractedText = "";
-      const mime = req.file.mimetype;
       const buf = req.file.buffer;
+      const name = req.file.originalname;
 
-      if (mime === "application/pdf" || req.file.originalname.endsWith(".pdf")) {
+      if (name.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
         const data = await pdfParse(buf);
         extractedText = data.text;
-      } else if (
-        mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-        req.file.originalname.endsWith(".docx")
-      ) {
+      } else if (name.endsWith(".docx")) {
         const result = await mammoth.extractRawText({ buffer: buf });
         extractedText = result.value;
       } else {
         return res.status(400).json({ message: "Formato no soportado. Use PDF o DOCX." });
       }
 
-      if (!extractedText.trim()) {
-        return res.status(400).json({ message: "No se pudo extraer texto del documento." });
-      }
-
-      const truncated = extractedText.substring(0, 12000);
+      if (!extractedText.trim()) return res.status(400).json({ message: "No se pudo extraer texto del documento." });
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `Eres un asistente legal experto en derecho costarricense.
-Analiza el siguiente documento legal y responde ÚNICAMENTE con JSON válido:
-{
-  "parties": { "plaintiff": "string", "defendant": "string" },
-  "claims": ["string"],
-  "facts": ["string"],
-  "legal_basis": ["string"],
-  "detected_omissions": ["string"],
-  "procedural_risk": {
-    "level": "low" | "medium" | "high",
-    "reasons": ["string"],
-    "recommendations": ["string"]
-  },
-  "relevant_articles": ["string"],
-  "executive_summary": "string"
-}`,
+            content: `Eres un asistente legal experto en derecho costarricense. Analiza el siguiente documento legal y responde ÚNICAMENTE con JSON válido:
+{"parties":{"plaintiff":"string","defendant":"string"},"claims":["string"],"facts":["string"],"legal_basis":["string"],"detected_omissions":["string"],"procedural_risk":{"level":"low|medium|high","reasons":["string"],"recommendations":["string"]},"relevant_articles":["string"],"executive_summary":"string"}`,
           },
-          { role: "user", content: truncated },
+          { role: "user", content: extractedText.substring(0, 12000) },
         ],
         response_format: { type: "json_object" },
         max_tokens: 2000,
       });
 
-      const raw = completion.choices[0]?.message?.content || "{}";
-      const analysis = JSON.parse(raw);
+      const analysis = JSON.parse(completion.choices[0]?.message?.content || "{}");
       res.json({ analysis, filename: req.file.originalname });
     } catch (err: any) {
       console.error("Analysis error:", err);
-      res.status(500).json({ message: "Error al analizar documento: " + err.message });
+      res.status(500).json({ message: "Error al analizar: " + err.message });
     }
   });
 
   // ──────────────────────────────────────────
-  // APPEALS (Module B)
+  // APPEALS
   // ──────────────────────────────────────────
   app.get("/api/appeals", async (req, res) => {
     const userId = getUserId(req);
-    const list = await storage.getAppeals(userId);
-    res.json(list);
+    const { orgId } = await getOrgCtx(userId);
+    res.json(await storage.getAppeals(userId, orgId ?? undefined));
   });
 
   app.get("/api/appeals/:id", async (req, res) => {
-    const appeal = await storage.getAppeal(req.params.id);
-    if (!appeal) return res.status(404).json({ message: "Not found" });
-    res.json(appeal);
+    const a = await storage.getAppeal(req.params.id);
+    if (!a) return res.status(404).json({ message: "Not found" });
+    res.json(a);
   });
 
   app.post("/api/appeals", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const appeal = await storage.createAppeal({ ...req.body, userId });
-      res.status(201).json(appeal);
+      const { orgId } = await getOrgCtx(userId);
+      const a = await storage.createAppeal({ ...req.body, userId, orgId: orgId ?? undefined });
+      res.status(201).json(a);
     } catch (err) {
       res.status(400).json({ message: "Invalid data" });
     }
@@ -296,7 +389,7 @@ Analiza el siguiente documento legal y responde ÚNICAMENTE con JSON válido:
       const {
         processType, caseNumber, resolvingBody, resolutionType, resolutionDate,
         grievances, selectedArticles, manualJurisprudence,
-        writingStyle, lawyerName, barNumber, destinationCourt
+        writingStyle, lawyerName, barNumber, destinationCourt,
       } = req.body;
 
       const styleMap: Record<string, string> = {
@@ -306,36 +399,10 @@ Analiza el siguiente documento legal y responde ÚNICAMENTE con JSON válido:
       };
 
       const grievancesText = (grievances as any[]).map((g: any, i: number) =>
-        `AGRAVIO ${i + 1}: ${g.title}\n${g.description}`
-      ).join("\n\n");
+        `AGRAVIO ${i + 1}: ${g.title}\n${g.description}`).join("\n\n");
 
       const articlesText = [...(selectedArticles || []), ...(manualJurisprudence ? [manualJurisprudence] : [])].join("; ");
-
       const today = new Date().toLocaleDateString("es-CR", { year: "numeric", month: "long", day: "numeric" });
-
-      const systemPrompt = `Genera un recurso de apelación formal costarricense con la siguiente estructura:
-- Encabezado: ciudad, fecha (${today}), tribunal de destino
-- Identificación de la parte y número de expediente
-- Cada agravio numerado con: hechos, fundamento jurídico, artículos citados
-- Sección de petitoria formal ('POR TANTO')
-- Bloque de firma con nombre del abogado y número de colegiatura
-Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho procesal costarricense. Sé técnicamente preciso.`;
-
-      const userPrompt = `Proceso: ${processType}
-Órgano resolutor: ${resolvingBody}
-Tipo resolución: ${resolutionType}
-Fecha resolución: ${resolutionDate}
-Número expediente: ${caseNumber}
-Tribunal destinatario: ${destinationCourt}
-Abogado: ${lawyerName} - Colegiado N° ${barNumber}
-
-AGRAVIOS:
-${grievancesText}
-
-FUNDAMENTO LEGAL A CITAR:
-${articlesText}
-
-Genera el recurso completo en español formal.`;
 
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.setHeader("Transfer-Encoding", "chunked");
@@ -343,20 +410,28 @@ Genera el recurso completo en español formal.`;
       const stream = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
+          {
+            role: "system",
+            content: `Genera un recurso de apelación formal costarricense con la siguiente estructura:
+- Encabezado: ciudad, fecha (${today}), tribunal de destino
+- Identificación de la parte y número de expediente
+- Cada agravio numerado con: hechos, fundamento jurídico, artículos citados
+- Sección de petitoria formal ('POR TANTO')
+- Bloque de firma con nombre del abogado y número de colegiatura
+Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho procesal costarricense.`,
+          },
+          {
+            role: "user",
+            content: `Proceso: ${processType}\nÓrgano: ${resolvingBody}\nTipo resolución: ${resolutionType}\nFecha: ${resolutionDate}\nExpediente: ${caseNumber}\nTribunal destino: ${destinationCourt}\nAbogado: ${lawyerName} - Colegiado N° ${barNumber}\n\nAGRAVIOS:\n${grievancesText}\n\nFUNDAMENTO LEGAL:\n${articlesText}`,
+          },
         ],
         stream: true,
         max_tokens: 4000,
       });
 
-      let full = "";
       for await (const chunk of stream) {
         const text = chunk.choices[0]?.delta?.content || "";
-        if (text) {
-          full += text;
-          res.write(text);
-        }
+        if (text) res.write(text);
       }
       res.end();
     } catch (err: any) {
@@ -370,16 +445,17 @@ Genera el recurso completo en español formal.`;
   // ──────────────────────────────────────────
   app.get("/api/editor/documents", async (req, res) => {
     const userId = getUserId(req);
-    const docs = await storage.getDocuments(userId);
-    res.json(docs);
+    const { orgId } = await getOrgCtx(userId);
+    res.json(await storage.getDocuments(userId, orgId ?? undefined));
   });
 
   app.post("/api/editor/documents", async (req, res) => {
     try {
       const userId = getUserId(req);
+      const { orgId } = await getOrgCtx(userId);
       const { titulo, contenidoHtml = "<p></p>", tipo = "otro" } = req.body;
       if (!titulo) return res.status(400).json({ message: "titulo required" });
-      const doc = await storage.createDocument({ userId, titulo, contenidoHtml, tipo });
+      const doc = await storage.createDocument({ userId, orgId: orgId ?? undefined, titulo, contenidoHtml, tipo });
       res.status(201).json(doc);
     } catch (err) {
       res.status(400).json({ message: "Invalid data" });
@@ -397,14 +473,12 @@ Genera el recurso completo en español formal.`;
       const id = req.params.id;
       const doc = await storage.getDocument(id);
       if (!doc) return res.status(404).json({ message: "Not found" });
-
       const { contenidoHtml } = req.body;
       if (contenidoHtml && contenidoHtml !== doc.contenidoHtml) {
         const count = await storage.countDocumentVersions(id);
         if (count >= 10) await storage.deleteOldestVersion(id);
         await storage.createDocumentVersion({ documentId: id, contenidoHtml: doc.contenidoHtml });
       }
-
       const updated = await storage.updateDocument(id, req.body);
       res.json(updated);
     } catch (err) {
@@ -441,7 +515,6 @@ Genera el recurso completo en español formal.`;
 
       let signatureRequestId = `mock-${Date.now()}`;
 
-      // Real Dropbox Sign call if API key available
       const dropboxKey = process.env.DROPBOX_SIGN_API_KEY;
       if (dropboxKey && firmantes?.length) {
         try {
@@ -452,15 +525,11 @@ Genera el recurso completo en español formal.`;
             formData.append(`signers[${i}][name]`, f.nombre);
             formData.append(`signers[${i}][order]`, String(i));
           });
-
           const resp = await fetch("https://api.hellosign.com/v3/signature_request/send", {
             method: "POST",
-            headers: {
-              Authorization: `Basic ${Buffer.from(dropboxKey + ":").toString("base64")}`,
-            },
+            headers: { Authorization: `Basic ${Buffer.from(dropboxKey + ":").toString("base64")}` },
             body: formData,
           });
-
           if (resp.ok) {
             const data: any = await resp.json();
             signatureRequestId = data.signature_request?.signature_request_id || signatureRequestId;
@@ -470,13 +539,7 @@ Genera el recurso completo en español formal.`;
         }
       }
 
-      const firmaReq = await storage.createFirmaRequest({
-        documentId,
-        firmantes,
-        signatureRequestId,
-        estado: "pendiente",
-      });
-
+      const firmaReq = await storage.createFirmaRequest({ documentId, firmantes, signatureRequestId, estado: "pendiente" });
       await storage.updateDocument(documentId, { estado: "revision" });
       res.json(firmaReq);
     } catch (err: any) {
@@ -484,25 +547,12 @@ Genera el recurso completo en español formal.`;
     }
   });
 
-  app.post("/api/signature/webhook", async (req, res) => {
-    try {
-      const event = req.body?.event;
-      if (event?.event_type === "signature_request_all_signed") {
-        const sigReqId = event.signature_request?.signature_request_id;
-        if (sigReqId) {
-          // Find and update firma request
-          // (simplified – in production you'd query by signature_request_id)
-        }
-      }
-      res.json({ status: "ok" });
-    } catch (err) {
-      res.status(400).json({ message: "Webhook error" });
-    }
+  app.post("/api/signature/webhook", (req, res) => {
+    res.json({ status: "ok" });
   });
 
   app.get("/api/firma/:documentId/status", async (req, res) => {
-    const requests = await storage.getFirmaRequests(req.params.documentId);
-    res.json(requests);
+    res.json(await storage.getFirmaRequests(req.params.documentId));
   });
 
   // ──────────────────────────────────────────
@@ -510,13 +560,19 @@ Genera el recurso completo en español formal.`;
   // ──────────────────────────────────────────
   app.get("/api/cases", async (req, res) => {
     const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    // assistants/interns only see their own cases; senior/admin see all org cases
+    if (orgId && hasRoleAtLeast(role, "senior")) {
+      return res.json(await storage.getCases(userId, orgId));
+    }
     res.json(await storage.getCases(userId));
   });
 
   app.post("/api/cases", async (req, res) => {
     try {
       const userId = getUserId(req);
-      const c = await storage.createCase({ ...req.body, userId });
+      const { orgId } = await getOrgCtx(userId);
+      const c = await storage.createCase({ ...req.body, userId, orgId: orgId ?? undefined });
       res.status(201).json(c);
     } catch (err) {
       res.status(400).json({ message: "Invalid data" });
@@ -555,11 +611,14 @@ Genera el recurso completo en español formal.`;
   // ──────────────────────────────────────────
   app.get("/api/deadlines", async (req, res) => {
     const userId = getUserId(req);
-    res.json(await storage.getDeadlines(userId));
+    const { orgId } = await getOrgCtx(userId);
+    res.json(await storage.getDeadlines(userId, orgId ?? undefined));
   });
 
   app.post("/api/deadlines", async (req, res) => {
-    const d = await storage.createDeadline({ ...req.body, userId: getUserId(req) });
+    const userId = getUserId(req);
+    const { orgId } = await getOrgCtx(userId);
+    const d = await storage.createDeadline({ ...req.body, userId, orgId: orgId ?? undefined });
     res.status(201).json(d);
   });
 

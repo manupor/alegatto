@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, json, uuid, customType, boolean, date } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, timestamp, json, uuid, customType, boolean } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -18,9 +18,38 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Multi-tenant: Organizations
+export const organizations = pgTable("organizations", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  plan: text("plan").notNull().default("free"), // free, pro, enterprise
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const orgMembers = pgTable("org_members", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").notNull(),
+  userId: uuid("user_id").notNull(),
+  role: text("role").notNull().default("assistant"), // admin, senior, assistant, intern
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Pending invitations for team management
+export const orgInvites = pgTable("org_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  orgId: uuid("org_id").notNull(),
+  email: text("email").notNull(),
+  role: text("role").notNull().default("assistant"),
+  token: text("token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const conversations = pgTable("conversations", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  orgId: uuid("org_id"),
   title: text("title").notNull().default("Nueva consulta"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -38,6 +67,7 @@ export const messages = pgTable("messages", {
 export const documentEditors = pgTable("document_editors", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  orgId: uuid("org_id"),
   titulo: text("titulo").notNull(),
   contenidoHtml: text("contenido_html").notNull(),
   tipo: text("tipo").notNull().default("otro"),
@@ -73,11 +103,11 @@ export const rawDocuments = pgTable("documents", {
   embedding: vector("embedding"),
 });
 
-// NEW: Appeals table
 export const appeals = pgTable("appeals", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
-  processType: text("process_type").notNull(), // civil, laboral, penal, administrativo, constitucional
+  orgId: uuid("org_id"),
+  processType: text("process_type").notNull(),
   caseNumber: text("case_number"),
   resolvingBody: text("resolving_body"),
   resolutionType: text("resolution_type"),
@@ -90,37 +120,19 @@ export const appeals = pgTable("appeals", {
   barNumber: text("bar_number"),
   destinationCourt: text("destination_court"),
   generatedDocument: text("generated_document"),
-  status: text("status").notNull().default("draft"), // draft, generated
+  status: text("status").notNull().default("draft"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
-// NEW: Organizations (multi-tenant)
-export const organizations = pgTable("organizations", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  plan: text("plan").notNull().default("free"), // free, pro, enterprise
-  active: boolean("active").notNull().default(true),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-export const orgMembers = pgTable("org_members", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  orgId: uuid("org_id").notNull(),
-  userId: uuid("user_id").notNull(),
-  role: text("role").notNull().default("assistant"), // admin, senior, assistant, intern
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
-
-// NEW: Cases table
 export const cases = pgTable("cases", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").notNull(),
+  orgId: uuid("org_id"),
   name: text("name").notNull(),
   client: text("client").notNull(),
   legalArea: text("legal_area").notNull(),
-  status: text("status").notNull().default("active"), // active, appeal, closed, archived
+  status: text("status").notNull().default("active"),
   caseNumber: text("case_number"),
   assignedLawyerId: uuid("assigned_lawyer_id"),
   notes: text("notes"),
@@ -149,18 +161,30 @@ export const deadlines = pgTable("deadlines", {
   id: uuid("id").primaryKey().defaultRandom(),
   caseId: uuid("case_id"),
   userId: uuid("user_id").notNull(),
+  orgId: uuid("org_id"),
   description: text("description").notNull(),
   dueDate: text("due_date").notNull(),
-  status: text("status").notNull().default("pending"), // pending, handled
+  status: text("status").notNull().default("pending"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Relations
+// ── Relations ────────────────────────────────────────────
+export const organizationRelations = relations(organizations, ({ many }) => ({
+  members: many(orgMembers),
+  invites: many(orgInvites),
+}));
+
+export const orgMemberRelations = relations(orgMembers, ({ one }) => ({
+  org: one(organizations, { fields: [orgMembers.orgId], references: [organizations.id] }),
+  user: one(users, { fields: [orgMembers.userId], references: [users.id] }),
+}));
+
 export const userRelations = relations(users, ({ many }) => ({
   conversations: many(conversations),
   documents: many(documentEditors),
   appeals: many(appeals),
   cases: many(cases),
+  orgMemberships: many(orgMembers),
 }));
 
 export const conversationRelations = relations(conversations, ({ one, many }) => ({
@@ -188,7 +212,7 @@ export const caseRelations = relations(cases, ({ one, many }) => ({
   notes: many(caseNotes),
 }));
 
-// Schemas
+// ── Insert Schemas ────────────────────────────────────────
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true });
@@ -196,10 +220,16 @@ export const insertDocumentEditorSchema = createInsertSchema(documentEditors).om
 export const insertFirmaRequestSchema = createInsertSchema(firmaRequests).omit({ id: true, createdAt: true, completadoAt: true });
 export const insertAppealSchema = createInsertSchema(appeals).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertCaseSchema = createInsertSchema(cases).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true });
+export const insertOrgMemberSchema = createInsertSchema(orgMembers).omit({ id: true, createdAt: true });
 
-// Types
+// ── Types ─────────────────────────────────────────────────
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type OrgMember = typeof orgMembers.$inferSelect;
+export type OrgInvite = typeof orgInvites.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type DocumentEditor = typeof documentEditors.$inferSelect;

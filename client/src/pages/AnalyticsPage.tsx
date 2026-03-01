@@ -1,4 +1,5 @@
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { RequireRole } from "@/components/RequireRole";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, TrendingUp, FileText, Gavel } from "lucide-react";
 import {
@@ -69,6 +70,7 @@ export default function AnalyticsPage() {
 
   return (
     <DashboardLayout>
+      <RequireRole role="admin">
       <div className="flex flex-col h-full bg-background overflow-auto">
         <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -169,6 +171,7 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+      </RequireRole>
     </DashboardLayout>
   );
 }
