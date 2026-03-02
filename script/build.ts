@@ -3,10 +3,13 @@ import { build as viteBuild } from "vite";
 import { rm, readFile } from "fs/promises";
 
 // server deps to bundle to reduce openat(2) syscalls
-// which helps cold start times
+// which helps cold start times.
+// NOTE: ESM-only packages that use import.meta.url must NOT be bundled into
+// CJS format — keep them external so they load from node_modules at runtime.
 const allowlist = [
   "@google/generative-ai",
   "axios",
+  "bcryptjs",
   "connect-pg-simple",
   "cors",
   "date-fns",
@@ -20,9 +23,9 @@ const allowlist = [
   "multer",
   "nanoid",
   "nodemailer",
-  "openai",
   "passport",
   "passport-local",
+  "passport-google-oauth20",
   "pg",
   "stripe",
   "uuid",
@@ -30,6 +33,8 @@ const allowlist = [
   "xlsx",
   "zod",
   "zod-validation-error",
+  // openai intentionally excluded — ESM package uses import.meta.url,
+  // which breaks when bundled to CJS. Loaded from node_modules at runtime.
 ];
 
 async function buildAll() {

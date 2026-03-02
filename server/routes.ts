@@ -9,8 +9,8 @@ import multer from "multer";
 import mammoth from "mammoth";
 import { randomUUID } from "crypto";
 import { createRequire } from "module";
-const require = createRequire(import.meta.url);
-const pdfParse = require("pdf-parse");
+const pdfParse: (buffer: Buffer) => Promise<{ text: string }> =
+  createRequire(process.cwd() + "/package.json")("pdf-parse");
 import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./legal-pipeline";
 import { passport, bcrypt } from "./auth";
 import { users } from "@shared/schema";
