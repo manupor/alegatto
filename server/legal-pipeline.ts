@@ -38,13 +38,19 @@ export async function ensureCacheLoaded() {
   cacheLoaded = true;
 
   try {
-    const rows = await db.select({
-      id: rawDocuments.id,
-      fuente: rawDocuments.fuente,
-      materia: rawDocuments.materia,
-      articulo: rawDocuments.articulo,
-      contenido: rawDocuments.contenido,
-    }).from(rawDocuments).orderBy(asc(rawDocuments.fuente), asc(rawDocuments.id)) as LegalArticle[];
+    const countResult = await db.execute(sql`SELECT COUNT(*)::int as cnt FROM documents`);
+    const countRows = extractRows(countResult);
+    console.log(`[LegalPipeline] DB count query result type=${typeof countResult}, isArray=${Array.isArray(countResult)}, keys=${Object.keys(countResult || {}).join(",")}, countRows=${JSON.stringify(countRows.slice(0,2))}`);
+
+    const rawResult = await db.execute(sql`
+      SELECT id, fuente, materia, articulo, contenido FROM documents ORDER BY fuente, id
+    `);
+    console.log(`[LegalPipeline] Raw result type=${typeof rawResult}, isArray=${Array.isArray(rawResult)}, constructor=${rawResult?.constructor?.name}, keys=${Object.keys(rawResult || {}).join(",")}`);
+    if (!Array.isArray(rawResult) && rawResult?.rows) {
+      console.log(`[LegalPipeline] result.rows type=${typeof rawResult.rows}, isArray=${Array.isArray(rawResult.rows)}, length=${rawResult.rows?.length}`);
+    }
+
+    const rows = extractRows(rawResult) as LegalArticle[];
 
     for (const row of rows) {
       if (!codeCache[row.fuente]) {
