@@ -45,4 +45,9 @@ integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.
 [userenv]
 
 [userenv.shared]
-APP_URL = "https://lex-ai-cr-co--manuelportuguez.replit.app"
+
+[userenv.production]
+APP_URL = "https://alegatto.com"
+
+[userenv.development]
+APP_URL = "http://localhost:5000"
