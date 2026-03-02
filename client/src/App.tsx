@@ -24,12 +24,16 @@ import AdminPage from "@/pages/AdminPage";
 import BillingPage from "@/pages/BillingPage";
 import ProfilePage from "@/pages/ProfilePage";
 import TilopayCheckoutPage from "@/pages/TilopayCheckoutPage";
+import PrivacyPage from "@/pages/PrivacyPage";
+import TermsPage from "@/pages/TermsPage";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route path="/auth" component={AuthPage} />
+      <Route path="/privacy" component={PrivacyPage} />
+      <Route path="/terms" component={TermsPage} />
       <Route path="/register-firm" component={RegisterFirmPage} />
       <Route path="/invite/:token" component={InvitePage} />
       <Route path="/dashboard" component={MainDashboardPage} />
