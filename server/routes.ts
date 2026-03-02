@@ -452,6 +452,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!prompt) return res.status(400).json({ message: "prompt required" });
 
       const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "No autenticado" });
       const { orgId } = await getOrgCtx(userId);
       let conversationId = inputConvId;
 

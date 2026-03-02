@@ -6,7 +6,8 @@
  * Layer C: PostgreSQL FTS (plainto_tsquery Spanish) for semantic coverage
  */
 import { db } from "./db";
-import { sql } from "drizzle-orm";
+import { sql, asc } from "drizzle-orm";
+import { rawDocuments } from "@shared/schema";
 
 export interface LegalArticle {
   id: string;
@@ -14,6 +15,13 @@ export interface LegalArticle {
   materia: string;
   articulo: string | null;
   contenido: string;
+}
+
+function extractRows(result: any): any[] {
+  if (Array.isArray(result)) return result;
+  if (result?.rows && Array.isArray(result.rows)) return result.rows;
+  if (result && typeof result === "object" && typeof result[Symbol.iterator] === "function") return [...result];
+  return [];
 }
 
 // ── In-memory cache ──────────────────────────────────────
@@ -30,10 +38,13 @@ export async function ensureCacheLoaded() {
   cacheLoaded = true;
 
   try {
-    const result = await db.execute(sql`
-      SELECT id, fuente, materia, articulo, contenido FROM documents ORDER BY fuente, id
-    `);
-    const rows = (Array.isArray(result) ? result : (result as any).rows ?? []) as LegalArticle[];
+    const rows = await db.select({
+      id: rawDocuments.id,
+      fuente: rawDocuments.fuente,
+      materia: rawDocuments.materia,
+      articulo: rawDocuments.articulo,
+      contenido: rawDocuments.contenido,
+    }).from(rawDocuments).orderBy(asc(rawDocuments.fuente), asc(rawDocuments.id)) as LegalArticle[];
 
     for (const row of rows) {
       if (!codeCache[row.fuente]) {
@@ -188,7 +199,7 @@ async function layerA(
             WHERE articulo ILIKE ${pattern}
             LIMIT 3
           `);
-      const rows = Array.isArray(dbResult) ? dbResult : (dbResult as any).rows ?? [];
+      const rows = extractRows(dbResult);
       for (const r of rows) {
         if (!seen.has(r.id)) { results.push(r); seen.add(r.id); }
       }
@@ -338,7 +349,7 @@ async function layerC(prompt: string, materias: string[] | undefined, alreadyFou
         ORDER BY score DESC
         LIMIT ${limit + 5}
       `);
-      const rows1 = Array.isArray(r1) ? r1 : (r1 as any).rows ?? [];
+      const rows1 = extractRows(r1);
       allRows.push(...rows1);
     } catch (_) {}
 
@@ -361,7 +372,7 @@ async function layerC(prompt: string, materias: string[] | undefined, alreadyFou
           ORDER BY score DESC
           LIMIT ${limit + 5}
         `);
-        const rows2 = Array.isArray(r2) ? r2 : (r2 as any).rows ?? [];
+        const rows2 = extractRows(r2);
         allRows.push(...rows2);
       } catch (_) {}
     }
