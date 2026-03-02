@@ -682,12 +682,12 @@ export default function AnalysisPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full overflow-auto">
-        <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <Gavel className="w-6 h-6 text-primary" />
-            Análisis de Documentos Legales
+        <header className="flex-none px-4 py-4 md:px-8 md:py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
+          <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+            <Gavel className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
+            <span className="truncate">Análisis de Documentos</span>
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <p className="text-xs md:text-sm text-muted-foreground mt-1 hidden sm:block">
             Suba un PDF o DOCX para obtener análisis con IA de normativa costarricense
           </p>
         </header>

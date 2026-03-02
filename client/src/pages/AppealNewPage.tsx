@@ -247,17 +247,21 @@ export default function AppealNewPage() {
 
   return (
     <DashboardLayout>
-      <div className="flex h-full overflow-hidden">
-        {/* Left panel - Stepper */}
-        <div className={`flex flex-col h-full ${showOutput ? "w-1/2 border-r border-border" : "w-full"} transition-all duration-500`}>
+      <div className="flex flex-col md:flex-row h-full overflow-hidden">
+        {/* Left panel - Stepper: hidden on mobile when output is shown */}
+        <div className={`flex flex-col h-full
+          ${showOutput
+            ? "hidden md:flex md:w-1/2 md:border-r md:border-border"
+            : "flex w-full"
+          } transition-all duration-500`}>
           {/* Header */}
-          <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md">
-            <h1 className="text-2xl font-bold text-foreground">Generador de Recurso de Apelación</h1>
-            <p className="text-sm text-muted-foreground mt-1">Complete los pasos para generar el recurso</p>
+          <header className="flex-none px-4 py-4 md:px-8 md:py-5 border-b border-border bg-background/80 backdrop-blur-md">
+            <h1 className="text-lg md:text-2xl font-bold text-foreground">Generador de Recurso</h1>
+            <p className="text-xs md:text-sm text-muted-foreground mt-0.5 hidden sm:block">Complete los pasos para generar el recurso</p>
           </header>
 
           {/* Step indicators */}
-          <div className="flex-none px-8 py-5 border-b border-border">
+          <div className="flex-none px-4 py-3 md:px-8 md:py-5 border-b border-border">
             <div className="flex items-center gap-1 overflow-x-auto">
               {STEPS.map((s, i) => (
                 <div key={i} className="flex items-center gap-1">
@@ -274,7 +278,7 @@ export default function AppealNewPage() {
           </div>
 
           {/* Step content */}
-          <div className="flex-1 overflow-auto p-8">
+          <div className="flex-1 overflow-auto p-4 md:p-8">
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -502,7 +506,7 @@ export default function AppealNewPage() {
           </div>
 
           {/* Navigation */}
-          <div className="flex-none px-8 py-5 border-t border-border flex items-center justify-between">
+          <div className="flex-none px-4 py-4 md:px-8 md:py-5 border-t border-border flex items-center justify-between">
             <button
               onClick={() => setStep(s => Math.max(0, s - 1))}
               disabled={step === 0}
@@ -534,37 +538,47 @@ export default function AppealNewPage() {
           </div>
         </div>
 
-        {/* Right panel - Output */}
+        {/* Right panel - Output: full screen on mobile, 50% on desktop */}
         <AnimatePresence>
           {showOutput && (
             <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: "50%", opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              className="flex flex-col h-full overflow-hidden"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="flex flex-col h-full overflow-hidden w-full md:w-1/2"
             >
-              <div className="flex-none px-6 py-5 border-b border-border flex items-center justify-between bg-background/80">
-                <h2 className="font-semibold text-foreground flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-primary" />
-                  Recurso Generado
-                  {generating && <span className="text-xs text-muted-foreground ml-2 animate-pulse">Generando…</span>}
-                </h2>
-                <div className="flex items-center gap-2">
+              <div className="flex-none px-4 py-3 md:px-6 md:py-5 border-b border-border flex items-center justify-between bg-background/80 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  {/* Back to form button - mobile only */}
+                  <button
+                    onClick={() => setShowOutput(false)}
+                    className="md:hidden flex items-center gap-1 text-muted-foreground hover:text-foreground text-xs shrink-0"
+                    data-testid="button-back-to-form"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <h2 className="font-semibold text-foreground flex items-center gap-2 truncate text-sm md:text-base">
+                    <FileText className="w-4 h-4 md:w-5 md:h-5 text-primary shrink-0" />
+                    Recurso Generado
+                    {generating && <span className="text-xs text-muted-foreground ml-1 animate-pulse">Generando…</span>}
+                  </h2>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
                   <button onClick={copyToClipboard} disabled={!generatedDoc} data-testid="button-copy"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-foreground disabled:opacity-30 hover-elevate">
-                    <Copy className="w-3.5 h-3.5" /> Copiar
+                    className="flex items-center gap-1 px-2 py-1.5 md:px-3 rounded-lg border border-border text-xs text-foreground disabled:opacity-30">
+                    <Copy className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Copiar</span>
                   </button>
                   <button onClick={downloadTxt} disabled={!generatedDoc} data-testid="button-download"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-foreground disabled:opacity-30 hover-elevate">
+                    className="hidden sm:flex items-center gap-1 px-2 py-1.5 md:px-3 rounded-lg border border-border text-xs text-foreground disabled:opacity-30">
                     <Download className="w-3.5 h-3.5" /> Descargar
                   </button>
                   <button onClick={editInEditor} disabled={!generatedDoc || generating} data-testid="button-edit-in-editor"
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs disabled:opacity-30">
+                    className="flex items-center gap-1 px-2.5 py-1.5 md:px-3 rounded-lg bg-primary text-primary-foreground text-xs disabled:opacity-30">
                     <Edit className="w-3.5 h-3.5" /> Editar
                   </button>
                 </div>
               </div>
-              <div ref={outputRef} className="flex-1 overflow-auto p-6">
+              <div ref={outputRef} className="flex-1 overflow-auto p-4 md:p-6">
                 <pre className="whitespace-pre-wrap font-mono text-sm text-foreground leading-relaxed">
                   {generatedDoc || <span className="text-muted-foreground">El recurso aparecerá aquí…</span>}
                 </pre>

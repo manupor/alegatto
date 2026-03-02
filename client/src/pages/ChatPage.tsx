@@ -195,7 +195,7 @@ export default function ChatPage() {
     <DashboardLayout>
       <div className="flex flex-col h-full bg-background relative">
         {/* Header */}
-        <header className="flex-none px-6 py-4 border-b border-border bg-background/80 backdrop-blur-md z-10">
+        <header className="flex-none px-4 py-3 md:px-6 md:py-4 border-b border-border bg-background/80 backdrop-blur-md z-10">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-xl font-bold text-foreground flex items-center gap-2">

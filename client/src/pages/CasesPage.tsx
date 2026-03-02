@@ -131,21 +131,22 @@ export default function CasesPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full bg-background overflow-auto">
-        <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <FolderOpen className="w-6 h-6 text-primary" /> Expedientes
+        <header className="flex-none px-4 py-4 md:px-8 md:py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+              <FolderOpen className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
+              <span className="truncate">Expedientes</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Gestión de casos y expedientes legales</p>
+            <p className="text-xs md:text-sm text-muted-foreground mt-0.5 hidden sm:block">Gestión de casos y expedientes legales</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <button onClick={exportCsv} data-testid="button-export-csv"
-              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border text-sm text-foreground hover:bg-secondary/50 transition-colors">
-              <Download className="w-4 h-4" /> CSV
+              className="flex items-center gap-1.5 px-2.5 py-2 md:px-3 rounded-lg border border-border text-sm text-foreground hover:bg-secondary/50 transition-colors">
+              <Download className="w-4 h-4" /> <span className="hidden sm:inline">CSV</span>
             </button>
             <button onClick={() => setShowCreateModal(true)} data-testid="button-create-case"
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
-              <Plus className="w-4 h-4" /> Nuevo expediente
+              className="flex items-center gap-1.5 px-3 py-2 md:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Nuevo expediente</span><span className="sm:hidden">Nuevo</span>
             </button>
           </div>
         </header>

@@ -218,18 +218,19 @@ export default function TeamPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full bg-background overflow-auto">
-        <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Users className="w-6 h-6 text-primary" /> Gestión de Equipo
+        <header className="flex-none px-4 py-4 md:px-8 md:py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+              <Users className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" />
+              <span className="truncate">Equipo</span>
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">
+            <p className="text-xs md:text-sm text-muted-foreground mt-0.5 hidden sm:block">
               {org?.name} — Miembros y permisos
             </p>
           </div>
           <button onClick={() => setShowInviteModal(true)} data-testid="button-invite-member"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
-            <Plus className="w-4 h-4" /> Invitar miembro
+            className="flex items-center gap-1.5 px-3 py-2 md:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shrink-0">
+            <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Invitar miembro</span><span className="sm:hidden">Invitar</span>
           </button>
         </header>
 

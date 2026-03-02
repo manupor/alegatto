@@ -72,11 +72,11 @@ export default function AnalyticsPage() {
     <DashboardLayout>
       <RequireRole role="admin">
       <div className="flex flex-col h-full bg-background overflow-auto">
-        <header className="flex-none px-8 py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-            <BarChart3 className="w-6 h-6 text-primary" /> Analíticas
+        <header className="flex-none px-4 py-4 md:px-8 md:py-5 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
+          <h1 className="text-xl md:text-2xl font-bold text-foreground flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 md:w-6 md:h-6 text-primary shrink-0" /> Analíticas
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Métricas y estadísticas del despacho</p>
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5 hidden sm:block">Métricas y estadísticas del despacho</p>
         </header>
 
         <div className="flex-1 p-6 md:p-8 space-y-8 max-w-7xl mx-auto w-full">

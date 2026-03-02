@@ -99,11 +99,11 @@ export default function MainDashboardPage() {
   return (
     <DashboardLayout>
       <div className="flex flex-col h-full overflow-auto bg-background">
-        <header className="flex-none px-8 py-6 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
-          <h1 className="text-2xl font-bold text-foreground">
+        <header className="flex-none px-4 py-4 md:px-8 md:py-6 border-b border-border bg-background/80 backdrop-blur-md sticky top-0 z-10">
+          <h1 className="text-xl md:text-2xl font-bold text-foreground">
             Buenos días, {user?.name?.split(" ")[0] || "Abogado"}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <p className="text-xs md:text-sm text-muted-foreground mt-0.5">
             {format(new Date(), "EEEE, d 'de' MMMM yyyy", { locale: es })}
           </p>
         </header>

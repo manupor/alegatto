@@ -102,3 +102,8 @@
 .ProseMirror blockquote {
   @apply border-l-4 border-primary pl-4 italic text-muted-foreground my-4;
 }
+
+/* Mobile safe area + responsive utilities */
+.safe-area-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
