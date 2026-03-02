@@ -1,0 +1,178 @@
+1. Desplegar / actualizar LexAI CR en Replit
+Paso a paso dentro de Replit
+
+    Asegurarte que corre en desarrollo
+
+        En la consola del Repl:
+
+        bash
+        npm install
+        npm run dev
+
+        Verifica que http://localhost:5000 (o el puerto que muestre Replit) responde con el frontend y que GET / devuelve 200 (tu health check).​
+
+    Build de producción
+
+        En la consola del Repl:
+
+        bash
+        npm run build
+
+        Esto ya te deja:
+
+            Frontend en dist/public/
+
+            Backend en dist/index.cjs
+
+            legal-corpus.json copiado a dist/
+
+    Publicar (Deploy/Publish)
+
+        Usá el botón Publish / Deploy del panel de Replit.​​
+
+        Configuración típica:
+
+            Build command: npm run build
+
+            Run command: node dist/index.cjs
+
+        Replit mapea tu puerto interno (5000 o process.env.PORT) a 80/443 y te da HTTPS + dominio lex-ai-cr-co--manuelportuguez.replit.app automáticamente.
+
+    Variables de entorno / secretos
+
+        En el panel de Secrets del Repl:
+
+            DATABASE_URL (si usás el Postgres de Replit, ya te la da; si es externo, la pones vos).
+
+            GOOGLE_CLIENT_ID
+
+            GOOGLE_CLIENT_SECRET
+
+            OPENAI_API_KEY (la que te sirve el proxy de Replit AI)
+
+            SESSION_SECRET
+
+        El deployment hereda estas env vars, así que no hay que repetirlas cada vez.
+
+    Primer arranque y seed
+
+        En el primer node dist/index.cjs en Replit:
+
+            Tu código verifica la tabla documents.
+
+            Si está vacía, hace seed desde legal-corpus.json en batches de 200.
+
+        Revisa los logs del deployment para confirmar que el seed se ejecutó solo una vez y terminó bien (sin timeouts de health check).​
+
+    Custom domain (opcional)
+
+        Si querés algo tipo app.lexai.cr:
+
+            Ve a Deployments → Settings → Link a domain.
+
+            Replit te da registros A y TXT para tu DNS.
+
+            Los agregás en tu proveedor de dominio y esperás propagación (puede tardar hasta 48h).
+
+            Replit gestiona automáticamente el SSL para HTTPS.​
+
+2. Desplegar en producción fuera de Replit (Railway / Render / VPS)
+
+Tu pipeline ya está casi plug‑and‑play para cualquier PaaS o VPS.
+Build en CI/CD
+
+En tu workflow (GitHub Actions, etc.):
+
+bash
+npm ci
+npm run build   # Vite + esbuild + copia legal-corpus.json
+
+Artefactos a desplegar:
+
+    dist/index.cjs
+
+    dist/public/
+
+    dist/legal-corpus.json
+
+Configurar el servicio
+
+En un PaaS tipo Render/Railway/Fly:
+
+    Dockerfile opcional o “build command” + “start command”:
+
+        Build: npm run build
+
+        Start: node dist/index.cjs
+
+    Asegúrate de que el servidor escucha en process.env.PORT || 5000.
+
+    Variables de entorno:
+
+        DATABASE_URL
+
+        GOOGLE_CLIENT_ID
+
+        GOOGLE_CLIENT_SECRET
+
+        OPENAI_API_KEY
+
+        SESSION_SECRET
+
+En una VM (Ubuntu, etc.):
+
+bash
+npm ci
+npm run build
+NODE_ENV=production \
+DATABASE_URL=... \
+GOOGLE_CLIENT_ID=... \
+GOOGLE_CLIENT_SECRET=... \
+OPENAI_API_KEY=... \
+SESSION_SECRET=... \
+node dist/index.cjs
+
+Opcional: usar pm2 para manejar el proceso:
+
+bash
+pm2 start dist/index.cjs --name lexai-cr
+
+Reverse proxy y SSL
+
+    Con Nginx:
+
+        Nginx escucha en 80/443, sirve SSL con Let’s Encrypt (certbot).
+
+        Proxy_pass a http://127.0.0.1:5000 (o el puerto donde esté Express).
+
+    Tu app sigue exactamente igual: Express sirve React estático desde dist/public y las rutas /api/*.
+
+3. Checklist rápido para que no te pegue en prod
+
+    Server:
+
+        app.listen(process.env.PORT || 5000)
+
+        GET / devuelve 200 y algo pequeño (health).
+
+    DB:
+
+        DATABASE_URL correctamente seteada (si es Postgres con TLS, configura ssl en pg si el proveedor lo pide).
+
+    Seed:
+
+        El auto‑seed de legal-corpus.json no bloquea demasiado el arranque y maneja el caso “ya existe” sin reintentar infinito.
+
+    AI:
+
+        OPENAI_API_KEY y endpoint de Replit AI bien configurados en prod.
+
+    Auth:
+
+        SESSION_SECRET fuerte y diferente entre dev/prod.
+
+Si querés, en el siguiente mensaje podemos bajar esto a:
+
+    Ejemplo exacto de server/index.ts (arranque + health + PORT), o
+
+    Un Dockerfile listo para subir a Railway/Fly sin tocar tu build actual.

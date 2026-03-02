@@ -101,48 +101,76 @@ function buildCacheFromRows(rows: LegalArticle[]) {
   }
 }
 
+function findCorpusFile(): string | null {
+  const paths = [
+    join(process.cwd(), "server", "legal-corpus.json"),
+    join(process.cwd(), "legal-corpus.json"),
+    join(__dirname, "legal-corpus.json"),
+  ];
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+  return null;
+}
+
+const EXPECTED_ARTICLE_COUNT = 4482;
+
 export async function ensureCacheLoaded() {
   if (cacheLoaded) return;
   cacheLoaded = true;
 
   try {
-    const countResult = await db.execute(sql`SELECT COUNT(*)::int as cnt FROM documents`);
-    const countRows = extractRows(countResult);
-    const dbCount = countRows[0]?.cnt ?? 0;
-
-    if (dbCount === 0) {
-      console.log("[LegalPipeline] DB empty — seeding from corpus file...");
-      await seedFromCorpusFile();
+    const corpusPath = findCorpusFile();
+    if (corpusPath) {
+      const articles = JSON.parse(readFileSync(corpusPath, "utf-8")) as Omit<LegalArticle, "id">[];
+      buildCacheFromRows(articles.map((a, i) => ({ ...a, id: `corpus-${i}` })));
+      console.log(`[LegalPipeline] Loaded ${articles.length} articles from JSON into memory`);
+    } else {
+      const rawResult = await db.execute(sql`
+        SELECT id, fuente, materia, articulo, contenido FROM documents ORDER BY fuente, id
+      `);
+      const rows = extractRows(rawResult) as LegalArticle[];
+      buildCacheFromRows(rows);
+      console.log(`[LegalPipeline] Loaded ${rows.length} articles from DB`);
     }
 
-    const rawResult = await db.execute(sql`
-      SELECT id, fuente, materia, articulo, contenido FROM documents ORDER BY fuente, id
-    `);
-    const rows = extractRows(rawResult) as LegalArticle[];
-
-    if (rows.length === 0) {
-      console.log("[LegalPipeline] DB still empty after seed, loading directly from JSON...");
-      const paths = [
-        join(process.cwd(), "server", "legal-corpus.json"),
-        join(process.cwd(), "legal-corpus.json"),
-        join(__dirname, "legal-corpus.json"),
-      ];
-      for (const p of paths) {
-        if (existsSync(p)) {
-          const articles = JSON.parse(readFileSync(p, "utf-8")) as LegalArticle[];
-          buildCacheFromRows(articles.map((a, i) => ({ ...a, id: String(i) })));
-          console.log(`[LegalPipeline] Loaded ${articles.length} articles from JSON file (in-memory only)`);
-          return;
-        }
-      }
-    }
-
-    buildCacheFromRows(rows);
-    console.log(`[LegalPipeline] Loaded ${rows.length} articles from ${Object.keys(codeCache).length} codes`);
+    seedDbInBackground();
   } catch (e) {
     console.error("[LegalPipeline] Cache load failed:", e);
     cacheLoaded = false;
   }
+}
+
+function seedDbInBackground() {
+  setTimeout(async () => {
+    try {
+      const countResult = await db.execute(sql`SELECT COUNT(*)::int as cnt FROM documents`);
+      const countRows = extractRows(countResult);
+      const dbCount = countRows[0]?.cnt ?? 0;
+
+      if (dbCount >= EXPECTED_ARTICLE_COUNT) {
+        console.log(`[LegalPipeline] DB already has ${dbCount} articles, no seed needed`);
+        return;
+      }
+
+      const corpusPath = findCorpusFile();
+      if (!corpusPath) {
+        console.log("[LegalPipeline] No corpus file found for background seed");
+        return;
+      }
+
+      if (dbCount > 0 && dbCount < EXPECTED_ARTICLE_COUNT) {
+        console.log(`[LegalPipeline] DB has partial data (${dbCount}/${EXPECTED_ARTICLE_COUNT}), clearing and re-seeding...`);
+        await db.execute(sql`DELETE FROM documents`);
+      }
+
+      console.log(`[LegalPipeline] Background seeding from ${corpusPath}...`);
+      await seedFromCorpusFile();
+      console.log("[LegalPipeline] Background seed complete");
+    } catch (e) {
+      console.error("[LegalPipeline] Background seed error:", e);
+    }
+  }, 3000);
 }
 
 // ── Normalization ────────────────────────────────────────
