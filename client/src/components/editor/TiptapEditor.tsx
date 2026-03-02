@@ -16,7 +16,7 @@ export function TiptapEditor({ content, onChange, editable = true }: TiptapEdito
 
   const editor = useEditor({
     extensions: [
-      StarterKit,
+      StarterKit.configure({ history: true }),
       Underline,
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
     ],

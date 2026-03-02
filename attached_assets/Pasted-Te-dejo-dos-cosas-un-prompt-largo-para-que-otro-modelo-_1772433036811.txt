@@ -1,0 +1,254 @@
+Te dejo dos cosas:
+
+    un prompt largo para que otro modelo/partner te ayude a dejar LexAI CR listo (Google login + tenants + deploy),
+
+    opciones concretas de cobro para Costa Rica.
+
+1. Prompt para “dejar listo” LexAI CR
+
+Copia y pega esto tal cual (y ajustá detalles si querés):
+
+Quiero que actúes como arquitecto y desarrollador senior full‑stack (Node.js 20, TypeScript, React, PostgreSQL) y me ayudes a dejar mi app LexAI CR lista para producción en Replit. Te voy a describir cómo está hecha y qué necesito que funcione perfecto.
+Contexto del proyecto
+
+    Backend:
+
+        Node.js 20 + TypeScript.
+
+        Express.js con middleware: cors, express.json, express.urlencoded, express-session (store en PostgreSQL con connect-pg-simple), passport.initialize, passport.session, express-rate-limit, rutas /api/*.
+
+        Passport.js con dos estrategias:
+
+            passport-local (email/password con bcrypt).
+
+            passport-google-oauth20 (OAuth 2.0 con scopes: profile, email, https://www.googleapis.com/auth/calendar.events), con access_type = offline para usar refresh tokens.
+
+        ORM: Drizzle ORM con pg (drizzle-orm/node-postgres), schema en shared/schema.ts con pgTable() y tipos $inferSelect, createInsertSchema de drizzle-zod.
+
+        BD: PostgreSQL (en Replit, con DATABASE_URL), más adelante compatible con Railway/Render.
+
+        AI: OpenAI GPT‑4o usando el SDK oficial con el proxy de Replit AI (chat completions, temperature 0.1). No hay embeddings, se hace RAG manual.
+
+        Build: esbuild genera dist/index.cjs (CJS). Paquetes como openai y pdf-parse se mantienen externos porque son ESM/usan import.meta.url. pdf-parse se carga con createRequire.
+
+    Frontend:
+
+        React 18 + Vite + TypeScript.
+
+        TailwindCSS + shadcn/ui (componentes copiados al repo).
+
+        TanStack Query v5, Wouter, Framer Motion.
+
+    Mobile:
+
+        Expo SDK 51, React Native, Expo Router.
+
+    RAG:
+
+        Tabla documents con 4,482 artículos de 8 códigos (Costa Rica).
+
+        Cache in-memory con ensureCacheLoaded() que carga todos los artículos al arrancar.
+
+        Pipeline de 3 capas:
+
+            A: detección de número de artículo por regex.
+
+            B: detección temática por keywords/materia.
+
+            C: PostgreSQL FTS con plainto_tsquery('spanish', ...) y ts_rank (query AND y OR).
+
+        Los artículos recuperados se inyectan como contexto en el system prompt antes de llamar a GPT‑4o.
+
+    Multi‑tenant:
+
+        Tablas organizations, org_members, users (con plan, googleAccessToken, googleRefreshToken).
+
+        RBAC con roles: admin, senior, junior, readonly.
+
+        getOrgCtx(userId) devuelve orgId, role y flags (isAdmin, isSenior, canEdit, canManageTeam, etc.).
+
+        Todos los recursos (cases, deadlines, documents, appeals, conversations, etc.) deberían filtrarse por orgId.
+
+    Deploy actual:
+
+        npm run dev → tsx server/index.ts + Vite middleware en puerto 5000.
+
+        npm run build → script/build.ts:
+
+            Vite build frontend → dist/public/.
+
+            esbuild backend → dist/index.cjs.
+
+            Copia legal-corpus.json a dist/.
+
+        En Replit, Publish corre npm run build y luego node dist/index.cjs.
+
+        Health check: GET / devuelve 200.
+
+        Auto‑seed de documents si la tabla está vacía (batches de 200).
+
+Lo que necesito que hagas
+
+Quiero que me des pasos concretos, código y checks para dejar todo lo siguiente funcionando PERFECTO en producción en Replit (dominio actual: https://lex-ai-cr-co--manuelportuguez.replit.app):
+
+    Login con Google (OAuth 2.0) estable en producción
+
+        Revisar cómo debo configurar exactamente:
+
+            callbackURL de GoogleStrategy en el backend.
+
+            URIs en Google Cloud (Authorized JavaScript origins y Authorized redirect URIs) para este dominio y, si es necesario, para un futuro dominio custom (https://app.lexai.cr).
+
+        Darme el código completo de:
+
+            Configuración de GoogleStrategy.
+
+            Rutas GET /auth/google y GET /auth/google/callback.
+
+            serializeUser y deserializeUser mínimos pero correctos para guardar user.id en la sesión.
+
+        Asegurar que:
+
+            Se guardan googleId, googleAccessToken, googleRefreshToken en la tabla users.
+
+            La sesión persiste en PostgreSQL (connect-pg-simple) y funciona detrás de proxy HTTPS de Replit (app.set("trust proxy", 1) y cookie.secure en producción).
+
+        Incluir cómo depurar errores típicos:
+
+            redirect_uri_mismatch.
+
+            Cookie que no se guarda.
+
+            Problemas de sesión entre frontend y backend.
+
+    Multi‑tenant limpio y seguro
+
+        Verificar el flujo para crear y usar tenants (organizations):
+
+            Cómo debe ser POST /api/org para crear una nueva organización y asociar al usuario actual como admin.
+
+            Cómo implementar un middleware orgContext que:
+
+                Use req.user.id para llamar a getOrgCtx.
+
+                Adjunte req.orgCtx con orgId y permisos.
+
+            Cómo asegurar que TODAS las queries de entidades multi‑tenant (casos, plazos, documentos, appeals, etc.) siempre filtren por orgId.
+
+        Explicar cómo probar end‑to‑end:
+
+            Usuario A (Google) crea organización y casos.
+
+            Invita Usuario B (Google) como junior.
+
+            Usuario B ve solo datos de esa org y no puede hacer acciones restringidas.
+
+    Checklist de “ready to launch” en Replit
+
+        Revisión del arranque:
+
+            app.listen(process.env.PORT || 5000) en index.cjs.
+
+            Endpoint /health sencillo que devuelva 200.
+
+        Variables de entorno necesarias:
+
+            DATABASE_URL.
+
+            GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET.
+
+            OPENAI_API_KEY (para el proxy de Replit AI).
+
+            SESSION_SECRET.
+
+        Cómo verificar:
+
+            Que el seed del corpus corre solo cuando hace falta y no rompe los health checks.
+
+            Que el RAG funciona en producción (ejemplo de query que debería responder bien).
+
+        Pasos de test manual que considerarías mínimos antes de decir “está lista para estudios de abogados”.
+
+    Recomendación de integración de cobros para Costa Rica
+
+        Quiero poder cobrar suscripciones o planes a clientes en Costa Rica (abogados, bufetes).
+
+        Stripe NO está disponible directamente para negocios en Costa Rica. Quiero opciones realistas:
+
+            Integración con pasarela local que soporte tarjetas y/o SINPE Móvil.
+
+            Alternativas internacionales que sí funcionen acá (PayPal u otros).
+
+        Dame:
+
+            2–3 opciones concretas de pasarela / proveedor de pago que pueda usar desde Costa Rica para cobrar en CRC y/o USD.
+
+            Ventajas y desventajas de cada una para un SaaS legal como el mío.
+
+            Esquema simple de integración en mi stack actual (crear “suscripción”, escuchar webhooks, activar plan del usuario/organization en la BD).
+
+Cómo quiero la respuesta
+
+    Paso a paso, con fragmentos de código concretos para pegar/adaptar.
+
+    Que la respuesta asuma que voy a desplegar sobre Replit primero, pero que más adelante podría migrar a un PaaS (Railway/Render) sin reescribir todo.
+
+    Marca explícitamente las partes que son “imprescindibles antes de lanzar” vs “mejoras que puedo dejar para después”.
+
+2. Wallet / pagos para Costa Rica
+
+Resumen rápido de opciones:
+
+    Stripe: no está disponible directamente para empresas en Costa Rica; solo con estructuras externas (empresa en otro país), lo cual complica regulatorio y fiscal.
+
+    Lo más realista hoy para LexAI CR:
+
+    Pasarela local + SINPE / tarjetas (proveedor local)
+
+        Ejemplos: plataformas tipo CyberSINPE que exponen API para cobros vía SINPE Móvil y panel web.
+
+        Bueno para cobrar en colones y que los abogados paguen con SINPE (muy natural para CR).
+
+        Necesita:
+
+            Contrato con proveedor local.
+
+            Integración de su API (creación de órdenes, callback/webhook de confirmación).
+
+    PayPal (para cobrar en USD)
+
+        Disponible para Costa Rica, permite cobrar a clientes que tengan tarjeta o cuenta PayPal.
+
+        Ventajas:
+
+            Integración sencilla (SDKs y webhooks).
+
+            Buena para clientes que acepten pagar en USD.
+
+        Desventajas:
+
+            No es tan natural como SINPE para estudios muy locales.
+
+            Comisiones en cada transacción.
+
+    Wise/otras fintech + facturación manual
+
+        Menos “automático tipo SaaS”, pero viable al inicio: facturas + pago por transferencia (SINPE) + reconciliación manual usando algún panel tipo CyberSINPE.
+
+Mi recomendación pragmática:
+
+    Fase 1 (rápida):
+
+        Implementar PayPal (o similar) para planes mensuales en USD (SaaS básico).
+
+        Guardar en la BD el subscriptionId y usar webhooks para cambiar plan del organization.
+
+    Fase 2 (local fuerte):
+
+        Integrar con un proveedor que te dé API sobre SINPE/SINPE Móvil (tipo CyberSINPE u otro banco local) para cobros en CRC, con un flujo simple: generar “orden de pago”, el usuario paga desde su app bancaria, webhook confirma y vos actualizás plan.
+
+Si querés, en el siguiente mensaje puedo armarte:
+
+    Esquema de tablas mínimas para suscripciones (subscriptions, payments), y
+
+    Un flujo de ejemplo usando PayPal (endpoints + webhook + cambio de plan).
