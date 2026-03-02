@@ -10,7 +10,7 @@ import { sql } from "drizzle-orm";
 import { rawDocuments } from "@shared/schema";
 import { readFileSync, existsSync } from "fs";
 import { join } from "path";
-import { v4 as uuidv4 } from "uuid";
+import { randomUUID } from "crypto";
 
 export interface LegalArticle {
   id: string;
@@ -60,7 +60,7 @@ async function seedFromCorpusFile(): Promise<void> {
     const batch = articles.slice(i, i + BATCH);
     await db.insert(rawDocuments).values(
       batch.map(a => ({
-        id: uuidv4(),
+        id: randomUUID(),
         fuente: a.fuente,
         materia: a.materia,
         articulo: a.articulo,
