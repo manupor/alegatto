@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Scale, ChevronRight, Mail, Lock, User } from "lucide-react";
 import { Redirect } from "wouter";
+import { SiGoogle } from "react-icons/si";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -162,7 +163,24 @@ export default function AuthPage() {
             </button>
           </form>
 
-          <div className="mt-8 text-center">
+          {/* Divider */}
+          <div className="flex items-center gap-4 mt-6">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-muted-foreground uppercase tracking-wider">o continuar con</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+
+          {/* Google OAuth */}
+          <a
+            href="/api/auth/google"
+            data-testid="button-google-login"
+            className="mt-4 flex items-center justify-center gap-3 w-full py-3 rounded-xl border border-border bg-card text-foreground font-medium text-sm hover:bg-secondary transition-colors"
+          >
+            <SiGoogle className="w-4 h-4 text-[#4285F4]" />
+            Continuar con Google
+          </a>
+
+          <div className="mt-6 text-center">
             <p className="text-sm text-muted-foreground">
               {isLogin ? "¿No tienes una cuenta?" : "¿Ya tienes una cuenta?"}
               <button

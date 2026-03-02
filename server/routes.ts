@@ -193,6 +193,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  // ── Google OAuth ─────────────────────────────────
+  app.get(
+    "/api/auth/google",
+    passport.authenticate("google", { scope: ["profile", "email"] }),
+  );
+
+  app.get(
+    "/api/auth/google/callback",
+    passport.authenticate("google", { failureRedirect: "/?error=google_auth_failed" }),
+    (req, res) => {
+      res.redirect("/dashboard");
+    },
+  );
+
   // ──────────────────────────────────────────
   // ORG CONTEXT
   // ──────────────────────────────────────────

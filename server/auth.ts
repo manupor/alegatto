@@ -1,5 +1,6 @@
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import session from "express-session";
 import connectPg from "connect-pg-simple";
 import bcrypt from "bcryptjs";
@@ -7,6 +8,7 @@ import { db } from "./db";
 import { users } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import type { Express } from "express";
+import crypto from "crypto";
 
 declare global {
   namespace Express {
@@ -15,6 +17,7 @@ declare global {
       email: string;
       name: string | null;
       plan: string;
+      avatarUrl?: string | null;
     }
   }
 }
@@ -47,6 +50,7 @@ export async function setupAuth(app: Express) {
     }),
   );
 
+  // ── Local strategy ──────────────────────────────
   passport.use(
     new LocalStrategy(
       { usernameField: "email", passwordField: "password" },
@@ -72,6 +76,7 @@ export async function setupAuth(app: Express) {
             email: user.email,
             name: user.name,
             plan: user.plan,
+            avatarUrl: user.avatarUrl,
           });
         } catch (err) {
           return done(err);
@@ -79,6 +84,82 @@ export async function setupAuth(app: Express) {
       },
     ),
   );
+
+  // ── Google OAuth strategy ───────────────────────
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    const appUrl = process.env.APP_URL || "http://localhost:5000";
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: `${appUrl}/api/auth/google/callback`,
+        },
+        async (_accessToken, _refreshToken, profile, done) => {
+          try {
+            const email = profile.emails?.[0]?.value;
+            if (!email) {
+              return done(new Error("No email from Google account"));
+            }
+
+            // Check if user exists by googleId
+            let [user] = await db
+              .select()
+              .from(users)
+              .where(eq(users.googleId, profile.id))
+              .limit(1);
+
+            if (!user) {
+              // Check if email already registered (link accounts)
+              const [existing] = await db
+                .select()
+                .from(users)
+                .where(eq(users.email, email))
+                .limit(1);
+
+              if (existing) {
+                // Link Google to existing account
+                [user] = await db
+                  .update(users)
+                  .set({
+                    googleId: profile.id,
+                    avatarUrl: profile.photos?.[0]?.value ?? existing.avatarUrl,
+                    name: existing.name ?? profile.displayName,
+                  })
+                  .where(eq(users.id, existing.id))
+                  .returning();
+              } else {
+                // Create new user
+                const randomPassword = crypto.randomBytes(32).toString("hex");
+                const hash = await bcrypt.hash(randomPassword, 10);
+                [user] = await db
+                  .insert(users)
+                  .values({
+                    email,
+                    password: hash,
+                    name: profile.displayName,
+                    googleId: profile.id,
+                    avatarUrl: profile.photos?.[0]?.value ?? null,
+                    plan: "FREE",
+                  })
+                  .returning();
+              }
+            }
+
+            return done(null, {
+              id: user.id,
+              email: user.email,
+              name: user.name,
+              plan: user.plan,
+              avatarUrl: user.avatarUrl,
+            });
+          } catch (err) {
+            return done(err as Error);
+          }
+        },
+      ),
+    );
+  }
 
   passport.serializeUser((user, done) => {
     done(null, user.id);
@@ -92,7 +173,13 @@ export async function setupAuth(app: Express) {
         .where(eq(users.id, id))
         .limit(1);
       if (!user) return done(null, false);
-      done(null, { id: user.id, email: user.email, name: user.name, plan: user.plan });
+      done(null, {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        plan: user.plan,
+        avatarUrl: user.avatarUrl,
+      });
     } catch (err) {
       done(err);
     }
