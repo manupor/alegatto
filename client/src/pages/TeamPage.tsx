@@ -32,6 +32,7 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("assistant");
   const [inviteLink, setInviteLink] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const { mutate: invite, isPending } = useMutation({
@@ -45,7 +46,8 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/org/invites"] });
       setInviteLink(data.inviteLink);
-      toast.success("Invitación creada");
+      setEmailSent(!!data.emailSent);
+      toast.success(data.emailSent ? "Invitación enviada por correo" : "Invitación creada");
     },
     onError: () => toast.error("Error al crear invitación"),
   });
@@ -98,8 +100,14 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
           <div className="space-y-4">
             <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4 text-center">
               <Check className="w-8 h-8 text-emerald-400 mx-auto mb-2" />
-              <p className="font-medium text-foreground text-sm">Invitación creada</p>
-              <p className="text-xs text-muted-foreground mt-1">Comparte este enlace con <strong>{email}</strong></p>
+              <p className="font-medium text-foreground text-sm">
+                {emailSent ? "Correo enviado automáticamente" : "Invitación creada"}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {emailSent
+                  ? <>Enviamos un correo de invitación a <strong>{email}</strong></>
+                  : <>Comparte este enlace con <strong>{email}</strong></>}
+              </p>
             </div>
             <div className="rounded-lg border border-border bg-background p-3 flex items-center gap-2">
               <p className="flex-1 text-xs text-muted-foreground truncate font-mono">{inviteLink}</p>
@@ -108,13 +116,15 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
                 {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
               </button>
             </div>
-            <a
-              href={`mailto:${email}?subject=${encodeURIComponent("Invitación a LexAI CR")}&body=${encodeURIComponent(`Hola,\n\nTe invito a unirte a nuestro despacho en LexAI CR, la plataforma legal con inteligencia artificial.\n\nHaz clic en el siguiente enlace para aceptar la invitación:\n${inviteLink}\n\nEste enlace es de uso único.\n\nSaludos.`)}`}
-              data-testid="link-send-email"
-              className="w-full py-2.5 rounded-lg border border-primary text-primary text-sm font-semibold text-center flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors"
-            >
-              <Mail className="w-4 h-4" /> Enviar por correo
-            </a>
+            {!emailSent && (
+              <a
+                href={`mailto:${email}?subject=${encodeURIComponent("Invitación a LexAI CR")}&body=${encodeURIComponent(`Hola,\n\nTe invito a unirte a nuestro despacho en LexAI CR, la plataforma legal con inteligencia artificial.\n\nHaz clic en el siguiente enlace para aceptar la invitación:\n${inviteLink}\n\nEste enlace es de uso único.\n\nSaludos.`)}`}
+                data-testid="link-send-email"
+                className="w-full py-2.5 rounded-lg border border-primary text-primary text-sm font-semibold text-center flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors"
+              >
+                <Mail className="w-4 h-4" /> Enviar por correo
+              </a>
+            )}
             <button onClick={onClose}
               className="w-full py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold">
               Cerrar

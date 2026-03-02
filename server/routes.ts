@@ -14,6 +14,7 @@ const pdfParse: (buffer: Buffer) => Promise<{ text: string }> =
 import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./legal-pipeline";
 import { passport, bcrypt } from "./auth";
 import { users } from "@shared/schema";
+import { sendInviteEmail } from "./email";
 
 // ── Google token refresh helper ───────────────────────────
 async function refreshGoogleTokenIfNeeded(user: { id: string; googleAccessToken: string | null; googleRefreshToken: string | null }): Promise<string | null> {
@@ -401,9 +402,26 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const token = randomUUID();
       const invite = await storage.createOrgInvite({ orgId, email, role: inviteRole, token });
-      // In production, send email here; for now return the invite link
       const inviteLink = `${req.protocol}://${req.get("host")}/invite/${token}`;
-      res.status(201).json({ invite, inviteLink });
+
+      // Send email via Resend (non-blocking — don't fail the request if email fails)
+      let emailSent = false;
+      if (process.env.RESEND_API_KEY) {
+        try {
+          const org = await storage.getOrg(orgId);
+          await sendInviteEmail({
+            toEmail: email,
+            orgName: org?.name ?? "su despacho",
+            inviteLink,
+            role: inviteRole,
+          });
+          emailSent = true;
+        } catch (emailErr: any) {
+          console.warn("[invite] Email send failed:", emailErr?.message);
+        }
+      }
+
+      res.status(201).json({ invite, inviteLink, emailSent });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
