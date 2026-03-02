@@ -22,6 +22,8 @@ import TeamPage from "@/pages/TeamPage";
 import InvitePage from "@/pages/InvitePage";
 import AdminPage from "@/pages/AdminPage";
 import BillingPage from "@/pages/BillingPage";
+import ProfilePage from "@/pages/ProfilePage";
+import TilopayCheckoutPage from "@/pages/TilopayCheckoutPage";
 
 function Router() {
   return (
@@ -42,6 +44,8 @@ function Router() {
       <Route path="/dashboard/analytics" component={AnalyticsPage} />
       <Route path="/dashboard/team" component={TeamPage} />
       <Route path="/dashboard/billing" component={BillingPage} />
+      <Route path="/dashboard/profile" component={ProfilePage} />
+      <Route path="/dashboard/checkout/tilopay" component={TilopayCheckoutPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

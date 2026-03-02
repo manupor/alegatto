@@ -182,6 +182,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  app.put("/api/user/profile", requireAuth, async (req, res) => {
+    try {
+      const { name } = req.body;
+      if (!name || typeof name !== "string") return res.status(400).json({ message: "Nombre requerido" });
+      const updated = await storage.updateUser(getUserId(req), { name: name.trim() });
+      res.json({ id: updated.id, name: updated.name, email: updated.email });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.post("/api/auth/login", (req, res, next) => {
     passport.authenticate("local", async (err: any, user: any, info: any) => {
       if (err) return next(err);

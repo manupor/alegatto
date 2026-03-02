@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrgContext } from "@/hooks/use-org";
 import {
-  FileText, FileSearch, BarChart3, Users, Scale, LogOut, X
+  FileText, FileSearch, BarChart3, Users, Scale, LogOut, X, UserCircle, CreditCard
 } from "lucide-react";
 
 const MOBILE_TAB_ITEMS = [
@@ -25,6 +25,7 @@ const ALL_NAV_ITEMS = [
   { label: "Alertas", path: "/dashboard/alerts", icon: Bell },
   { label: "Analíticas", path: "/dashboard/analytics", icon: BarChart3, adminOnly: true },
   { label: "Equipo", path: "/dashboard/team", icon: Users, adminOnly: true },
+  { label: "Facturación", path: "/dashboard/billing", icon: CreditCard },
 ];
 
 export function MobileNav() {
@@ -91,22 +92,30 @@ export function MobileNav() {
               <div className="w-10 h-1 rounded-full bg-border" />
             </div>
 
-            {/* User info */}
+            {/* User info — tappable → goes to profile */}
             <div className="px-5 py-3 border-b border-border">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
-                  {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{user?.name || "Usuario"}</p>
-                  <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-                </div>
-                <button onClick={() => setMenuOpen(false)} className="text-muted-foreground p-1">
+                <Link
+                  href="/dashboard/profile"
+                  onClick={() => setMenuOpen(false)}
+                  data-testid="mobile-link-perfil"
+                  className="flex items-center gap-3 flex-1 min-w-0 rounded-xl hover:bg-secondary/40 transition-colors p-1 -m-1"
+                >
+                  <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0">
+                    {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{user?.name || "Usuario"}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+                  </div>
+                  <UserCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+                </Link>
+                <button onClick={() => setMenuOpen(false)} className="text-muted-foreground p-1 ml-1">
                   <X className="w-5 h-5" />
                 </button>
               </div>
               {org && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-2 flex items-center gap-2 pl-1">
                   <Scale className="w-3.5 h-3.5 text-primary" />
                   <span className="text-xs text-muted-foreground">{org.name}</span>
                   <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary capitalize">{org.plan}</span>

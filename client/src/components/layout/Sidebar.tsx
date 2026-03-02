@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   MessageSquare, FileText, LogOut, Scale,
   Gavel, FolderOpen, Bell, BarChart3, FileSearch,
-  Home, Users, CreditCard
+  Home, Users, CreditCard, UserCircle
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrgContext } from "@/hooks/use-org";
@@ -111,7 +111,11 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="p-3 border-t border-border space-y-1">
-        <div className="px-3 py-2.5 rounded-lg bg-secondary/30 border border-border flex items-center gap-2.5">
+        <Link
+          href="/dashboard/profile"
+          data-testid="nav-link-perfil"
+          className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-secondary/30 border border-border hover:bg-secondary/60 hover:border-primary/30 transition-all group cursor-pointer"
+        >
           <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs shrink-0">
             {user?.name?.charAt(0)?.toUpperCase() || user?.email?.charAt(0)?.toUpperCase() || "U"}
           </div>
@@ -119,7 +123,8 @@ export function Sidebar() {
             <p className="text-xs font-medium text-foreground truncate">{user?.name || "Usuario"}</p>
             <p className="text-[10px] text-muted-foreground truncate">{user?.email}</p>
           </div>
-        </div>
+          <UserCircle className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary shrink-0 transition-colors" />
+        </Link>
 
         <button
           onClick={() => logout()}
