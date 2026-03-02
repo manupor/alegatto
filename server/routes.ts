@@ -1126,30 +1126,30 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       <div class="field">
         <label>Método de pago</label>
         <!-- #method: SDK attaches change→sinpeMovil listener here -->
-        <select id="method"><option value="">Seleccione método…</option></select>
+        <select name="method" id="method"><option value="">Seleccione método…</option></select>
       </div>
 
       <div class="field">
         <label>Tarjeta guardada (opcional)</label>
-        <select id="cards"><option value="">Nueva tarjeta</option></select>
+        <select name="cards" id="cards"><option value="">Nueva tarjeta</option></select>
       </div>
 
       <div class="field">
         <label>Número de tarjeta</label>
         <!-- #ccnumber: SDK uses payform.cardNumberInput() on this element -->
-        <input id="ccnumber" type="tel" placeholder="4242 4242 4242 4242" autocomplete="cc-number" inputmode="numeric"/>
+        <input type="text" id="ccnumber" name="ccnumber" value="" placeholder="4242 4242 4242 4242" autocomplete="cc-number"/>
       </div>
 
       <div class="row">
         <div>
           <label>Vencimiento</label>
           <!-- #expdate: SDK uses payform.expiryInput() on this element -->
-          <input id="expdate" type="tel" placeholder="MM/AAAA" autocomplete="cc-exp" inputmode="numeric"/>
+          <input type="text" id="expdate" name="expdate" value="" placeholder="01 / 28" autocomplete="cc-exp"/>
         </div>
         <div>
           <label>CVV</label>
           <!-- #cvv: SDK uses payform.cvcInput() on this element -->
-          <input id="cvv" type="tel" placeholder="123" autocomplete="cc-csc" inputmode="numeric"/>
+          <input type="text" id="cvv" name="cvv" value="" placeholder="123" autocomplete="cc-csc"/>
         </div>
       </div>
 
@@ -1159,6 +1159,9 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       </button>
 
     </form>
+
+    <!-- REQUIRED by Tilopay SDK for 3DS process — do NOT remove -->
+    <div id="result"></div>
 
     <div class="security-note">🔒 Visa · Mastercard · SINPE Móvil · Cifrado PCI-DSS</div>
   </div>
