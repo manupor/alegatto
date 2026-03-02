@@ -5,9 +5,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, FileText, AlertTriangle, ChevronDown, ChevronUp,
   Download, FolderPlus, Loader2, Shield, Users, BookOpen,
-  CheckCircle, XCircle, Info, Gavel, MessageSquare, Send, Bot, User
+  CheckCircle, XCircle, Info, Gavel, MessageSquare, Send, Bot, User, FileDown
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  Document, Packer, Paragraph, TextRun, HeadingLevel,
+  AlignmentType, TableRow, TableCell, Table, WidthType
+} from "docx";
+import { saveAs } from "file-saver";
 
 interface AnalysisResult {
   parties: { plaintiff: string; defendant: string };
@@ -249,6 +254,19 @@ export default function AnalysisPage() {
   const [filename, setFilename] = useState("");
   const [docText, setDocText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   const onDrop = useCallback(async (accepted: File[]) => {
     const file = accepted[0];
@@ -286,47 +304,235 @@ export default function AnalysisPage() {
     disabled: loading,
   });
 
-  const exportAnalysisPdf = () => {
+  const exportAsDocx = async () => {
     if (!analysis) return;
-    const content = `ANÁLISIS LEGAL - LexAI CR
-Archivo: ${filename}
+    setExporting(true);
+    setExportOpen(false);
+    try {
+      const RIESGO_MAP: Record<string, string> = { low: "BAJO", medium: "MEDIO", high: "ALTO" };
+      const riesgoLabel = RIESGO_MAP[analysis.procedural_risk.level] ?? analysis.procedural_risk.level;
 
-RESUMEN EJECUTIVO
-${analysis.executive_summary}
+      const heading = (text: string) =>
+        new Paragraph({ text, heading: HeadingLevel.HEADING_2, spacing: { before: 300, after: 120 } });
 
-PARTES
-Demandante: ${analysis.parties.plaintiff}
-Demandado: ${analysis.parties.defendant}
+      const bullet = (text: string) =>
+        new Paragraph({
+          children: [new TextRun({ text: `• ${text}`, size: 22 })],
+          spacing: { after: 80 },
+        });
 
-PRETENSIONES
-${analysis.claims.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+      const numbered = (text: string, n: number) =>
+        new Paragraph({
+          children: [new TextRun({ text: `${n}. ${text}`, size: 22 })],
+          spacing: { after: 80 },
+        });
 
-HECHOS
-${analysis.facts.map((f, i) => `${i + 1}. ${f}`).join("\n")}
+      const doc = new Document({
+        creator: "LexAI CR",
+        title: `Análisis Legal – ${filename}`,
+        description: "Análisis generado por LexAI CR",
+        sections: [
+          {
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: "ANÁLISIS LEGAL", bold: true, size: 36, color: "10B981" })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 60 },
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: "LexAI CR — Asistente Jurídico Inteligente", size: 22, color: "64748B" })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 60 },
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: `Archivo: ${filename}`, size: 20, italics: true, color: "64748B" })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 60 },
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: `Fecha: ${new Date().toLocaleDateString("es-CR")}`, size: 20, color: "64748B" })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 300 },
+              }),
 
-FUNDAMENTO JURÍDICO
-${analysis.legal_basis.join("\n")}
+              heading("RESUMEN EJECUTIVO"),
+              new Paragraph({ children: [new TextRun({ text: analysis.executive_summary, size: 22 })], spacing: { after: 200 } }),
 
-OMISIONES DETECTADAS
-${analysis.detected_omissions.join("\n")}
+              heading("RIESGO PROCESAL"),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Nivel de riesgo: ", bold: true, size: 22 }),
+                  new TextRun({ text: riesgoLabel, bold: true, size: 22, color: analysis.procedural_risk.level === "high" ? "EF4444" : analysis.procedural_risk.level === "medium" ? "F59E0B" : "10B981" }),
+                ],
+                spacing: { after: 100 },
+              }),
+              ...analysis.procedural_risk.reasons.map(r => bullet(r)),
+              ...(analysis.procedural_risk.recommendations.length > 0
+                ? [new Paragraph({ children: [new TextRun({ text: "Recomendaciones:", bold: true, size: 22 })], spacing: { before: 120, after: 80 } }),
+                   ...analysis.procedural_risk.recommendations.map(r => bullet("✓ " + r))]
+                : []),
 
-RIESGO PROCESAL: ${analysis.procedural_risk.level.toUpperCase()}
-${analysis.procedural_risk.reasons.join("\n")}
+              heading("PARTES DEL PROCESO"),
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                rows: [
+                  new TableRow({
+                    children: [
+                      new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Demandante", bold: true, size: 22 })] })], width: { size: 50, type: WidthType.PERCENTAGE } }),
+                      new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: "Demandado", bold: true, size: 22 })] })], width: { size: 50, type: WidthType.PERCENTAGE } }),
+                    ],
+                  }),
+                  new TableRow({
+                    children: [
+                      new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: analysis.parties.plaintiff || "No identificado", size: 22 })] })] }),
+                      new TableCell({ children: [new Paragraph({ children: [new TextRun({ text: analysis.parties.defendant || "No identificado", size: 22 })] })] }),
+                    ],
+                  }),
+                ],
+              }),
 
-RECOMENDACIONES
-${analysis.procedural_risk.recommendations.join("\n")}
+              ...(analysis.claims.length > 0 ? [
+                heading(`PRETENSIONES (${analysis.claims.length})`),
+                ...analysis.claims.map((c, i) => numbered(c, i + 1)),
+              ] : []),
 
-ARTÍCULOS RELEVANTES
-${analysis.relevant_articles.join(", ")}
-`;
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `analisis-${filename}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Análisis exportado");
+              ...(analysis.facts.length > 0 ? [
+                heading(`HECHOS RELEVANTES (${analysis.facts.length})`),
+                ...analysis.facts.map((f, i) => numbered(f, i + 1)),
+              ] : []),
+
+              ...(analysis.legal_basis.length > 0 ? [
+                heading("FUNDAMENTO JURÍDICO"),
+                ...analysis.legal_basis.map(l => bullet(l)),
+              ] : []),
+
+              ...(analysis.detected_omissions.length > 0 ? [
+                heading("OMISIONES DETECTADAS"),
+                ...analysis.detected_omissions.map(o => bullet("⚠ " + o)),
+              ] : []),
+
+              ...(analysis.relevant_articles.length > 0 ? [
+                heading("ARTÍCULOS RELEVANTES"),
+                new Paragraph({
+                  children: [new TextRun({ text: analysis.relevant_articles.join(" · "), size: 22 })],
+                  spacing: { after: 200 },
+                }),
+              ] : []),
+
+              new Paragraph({
+                children: [new TextRun({ text: "—", color: "64748B", size: 18 })],
+                alignment: AlignmentType.CENTER,
+                spacing: { before: 400 },
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: "Generado por LexAI CR · lexai.cr", color: "64748B", size: 18, italics: true })],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+          },
+        ],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, `analisis-${filename.replace(/\.[^.]+$/, "")}.docx`);
+      toast.success("Exportado como Word (.docx)");
+    } catch (err: any) {
+      toast.error("Error al exportar: " + err.message);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const exportAsPdf = () => {
+    if (!analysis) return;
+    setExportOpen(false);
+    const RIESGO_MAP: Record<string, string> = { low: "BAJO", medium: "MEDIO", high: "ALTO" };
+    const RIESGO_COLOR: Record<string, string> = { low: "#10B981", medium: "#F59E0B", high: "#EF4444" };
+    const riesgoLabel = RIESGO_MAP[analysis.procedural_risk.level] ?? analysis.procedural_risk.level;
+    const riesgoColor = RIESGO_COLOR[analysis.procedural_risk.level] ?? "#64748B";
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Análisis Legal – ${filename}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Georgia, serif; font-size: 12pt; color: #1e293b; background: #fff; padding: 40px 60px; }
+    .header { text-align: center; border-bottom: 3px solid #10B981; padding-bottom: 20px; margin-bottom: 28px; }
+    .logo { font-size: 22pt; font-weight: bold; color: #10B981; letter-spacing: 2px; }
+    .subtitle { font-size: 10pt; color: #64748b; margin-top: 4px; }
+    .meta { font-size: 9pt; color: #94a3b8; margin-top: 6px; }
+    h2 { font-size: 13pt; font-weight: bold; color: #0f172a; border-left: 4px solid #10B981; padding-left: 10px; margin: 24px 0 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    p, li { line-height: 1.6; margin-bottom: 6px; font-size: 11pt; }
+    ul { padding-left: 20px; }
+    .summary-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 14px 18px; margin-bottom: 4px; }
+    .risk-box { border-radius: 6px; padding: 14px 18px; margin-bottom: 4px; }
+    .risk-label { font-size: 14pt; font-weight: bold; color: ${riesgoColor}; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 10px; }
+    th, td { border: 1px solid #e2e8f0; padding: 8px 12px; font-size: 11pt; }
+    th { background: #f8fafc; font-weight: bold; }
+    .pills { display: flex; flex-wrap: wrap; gap: 6px; }
+    .pill { display: inline-block; background: #f0fdf4; border: 1px solid #bbf7d0; color: #059669; border-radius: 99px; padding: 2px 10px; font-size: 10pt; }
+    .footer { text-align: center; margin-top: 40px; padding-top: 12px; border-top: 1px solid #e2e8f0; color: #94a3b8; font-size: 9pt; }
+    @media print { body { padding: 20px 40px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo">LexAI CR</div>
+    <div class="subtitle">Asistente Jurídico Inteligente para Costa Rica</div>
+    <div class="meta">Archivo: ${filename} &nbsp;·&nbsp; ${new Date().toLocaleDateString("es-CR", { year: "numeric", month: "long", day: "numeric" })}</div>
+  </div>
+
+  <h2>Resumen Ejecutivo</h2>
+  <div class="summary-box"><p>${analysis.executive_summary}</p></div>
+
+  <h2>Riesgo Procesal</h2>
+  <div class="risk-box" style="background:${riesgoColor}15; border:1px solid ${riesgoColor}40;">
+    <p>Nivel: <span class="risk-label">${riesgoLabel}</span></p>
+    <ul style="margin-top:8px">${analysis.procedural_risk.reasons.map(r => `<li>${r}</li>`).join("")}</ul>
+    ${analysis.procedural_risk.recommendations.length > 0 ? `
+    <p style="margin-top:12px;font-weight:bold;">Recomendaciones:</p>
+    <ul>${analysis.procedural_risk.recommendations.map(r => `<li>✓ ${r}</li>`).join("")}</ul>` : ""}
+  </div>
+
+  <h2>Partes del Proceso</h2>
+  <table>
+    <tr><th>Demandante</th><th>Demandado</th></tr>
+    <tr><td>${analysis.parties.plaintiff || "No identificado"}</td><td>${analysis.parties.defendant || "No identificado"}</td></tr>
+  </table>
+
+  ${analysis.detected_omissions.length > 0 ? `
+  <h2>Omisiones Detectadas</h2>
+  <ul>${analysis.detected_omissions.map(o => `<li>⚠ ${o}</li>`).join("")}</ul>` : ""}
+
+  ${analysis.claims.length > 0 ? `
+  <h2>Pretensiones (${analysis.claims.length})</h2>
+  <ol>${analysis.claims.map(c => `<li>${c}</li>`).join("")}</ol>` : ""}
+
+  ${analysis.facts.length > 0 ? `
+  <h2>Hechos Relevantes (${analysis.facts.length})</h2>
+  <ol>${analysis.facts.map(f => `<li>${f}</li>`).join("")}</ol>` : ""}
+
+  ${analysis.legal_basis.length > 0 ? `
+  <h2>Fundamento Jurídico</h2>
+  <ul>${analysis.legal_basis.map(l => `<li>${l}</li>`).join("")}</ul>` : ""}
+
+  ${analysis.relevant_articles.length > 0 ? `
+  <h2>Artículos Relevantes</h2>
+  <div class="pills">${analysis.relevant_articles.map(a => `<span class="pill">${a}</span>`).join("")}</div>` : ""}
+
+  <div class="footer">Generado por LexAI CR · lexai.cr</div>
+</body>
+</html>`;
+
+    const win = window.open("", "_blank");
+    if (!win) { toast.error("Habilite ventanas emergentes para exportar PDF"); return; }
+    win.document.write(html);
+    win.document.close();
+    win.onload = () => { win.focus(); win.print(); };
+    toast.success("Abriendo vista de impresión para PDF…");
   };
 
   const risk = analysis?.procedural_risk;
@@ -399,14 +605,65 @@ ${analysis.relevant_articles.join(", ")}
                       {filename}
                     </p>
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={exportAnalysisPdf}
-                      className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-border text-sm hover-elevate transition-colors"
-                      data-testid="button-export-analysis"
-                    >
-                      <Download className="w-4 h-4" /> Exportar análisis
-                    </button>
+                  <div className="flex gap-2 flex-wrap items-center">
+                    {/* Export dropdown */}
+                    <div className="relative" ref={exportRef}>
+                      <button
+                        onClick={() => setExportOpen(v => !v)}
+                        disabled={exporting}
+                        className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary border border-border text-sm hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                        data-testid="button-export-analysis"
+                      >
+                        {exporting
+                          ? <Loader2 className="w-4 h-4 animate-spin" />
+                          : <FileDown className="w-4 h-4" />}
+                        Exportar
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform ${exportOpen ? "rotate-180" : ""}`} />
+                      </button>
+
+                      <AnimatePresence>
+                        {exportOpen && (
+                          <motion.div
+                            initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                            transition={{ duration: 0.12 }}
+                            className="absolute right-0 top-full mt-1.5 z-50 w-52 rounded-xl border border-border bg-card shadow-xl overflow-hidden"
+                          >
+                            <div className="p-1">
+                              <p className="px-3 py-1.5 text-xs text-muted-foreground font-medium uppercase tracking-wider">Formato</p>
+                              <button
+                                onClick={exportAsDocx}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-foreground hover:bg-secondary transition-colors"
+                                data-testid="button-export-docx"
+                              >
+                                <span className="w-8 h-8 rounded-md bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shrink-0">
+                                  <FileText className="w-4 h-4 text-blue-400" />
+                                </span>
+                                <div className="text-left">
+                                  <p className="font-medium">Word (.docx)</p>
+                                  <p className="text-xs text-muted-foreground">Microsoft Word</p>
+                                </div>
+                              </button>
+                              <button
+                                onClick={exportAsPdf}
+                                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-foreground hover:bg-secondary transition-colors"
+                                data-testid="button-export-pdf"
+                              >
+                                <span className="w-8 h-8 rounded-md bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
+                                  <FileDown className="w-4 h-4 text-red-400" />
+                                </span>
+                                <div className="text-left">
+                                  <p className="font-medium">PDF</p>
+                                  <p className="text-xs text-muted-foreground">Impresión / vista previa</p>
+                                </div>
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
                     <button
                       onClick={() => window.open("/dashboard/documentos", "_self")}
                       className="flex items-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm transition-colors"
