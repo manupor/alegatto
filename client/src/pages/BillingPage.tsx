@@ -141,7 +141,8 @@ export default function BillingPage() {
 
   return (
     <DashboardLayout>
-      <div className="p-6 md:p-10 max-w-5xl mx-auto">
+      <div className="flex-1 overflow-y-auto h-full">
+      <div className="p-5 md:p-10 max-w-5xl mx-auto pb-24 md:pb-10">
         {/* Header */}
         <div className="mb-10">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">Planes y Facturación</h1>
@@ -166,7 +167,7 @@ export default function BillingPage() {
             <Loader2 className="w-6 h-6 animate-spin mr-2" /> Cargando planes…
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="flex flex-col md:grid md:grid-cols-3 gap-5">
             {PLANS.map((plan) => {
               const Icon = plan.icon;
               const isCurrentPlan =
@@ -180,9 +181,9 @@ export default function BillingPage() {
                 <div
                   key={plan.key}
                   data-testid={`card-plan-${plan.key}`}
-                  className={`relative flex flex-col rounded-2xl border-2 bg-card p-6 transition-all
+                  className={`relative flex flex-col rounded-2xl border-2 bg-card p-5 md:p-6 transition-all
                     ${plan.color}
-                    ${isPro ? "shadow-lg scale-[1.02]" : ""}`}
+                    ${isPro ? "shadow-lg ring-1 ring-primary/20" : ""}`}
                 >
                   {/* Popular badge */}
                   {isPro && (
@@ -260,8 +261,9 @@ export default function BillingPage() {
 
         {/* Info note */}
         <p className="mt-8 text-center text-xs text-muted-foreground">
-          Los pagos son procesados de forma segura por Stripe. Puedes cancelar en cualquier momento desde el portal de facturación.
+          Los pagos son procesados de forma segura. Puedes cancelar en cualquier momento.
         </p>
+      </div>
       </div>
     </DashboardLayout>
   );
