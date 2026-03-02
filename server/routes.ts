@@ -417,6 +417,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).send();
   });
 
+  // Public: look up invite by token (no auth required)
+  app.get("/api/invite/:token", async (req, res) => {
+    try {
+      const invite = await storage.getOrgInviteByToken(req.params.token);
+      if (!invite) return res.status(404).json({ message: "Invitación no encontrada o expirada" });
+      const org = await storage.getOrg(invite.orgId);
+      res.json({ invite, orgName: org?.name ?? "la organización" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // Accept invite — requires the user to be authenticated
+  app.post("/api/invite/:token/accept", async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      if (!userId) return res.status(401).json({ message: "Debes iniciar sesión primero" });
+
+      const invite = await storage.getOrgInviteByToken(req.params.token);
+      if (!invite) return res.status(404).json({ message: "Invitación no encontrada o expirada" });
+
+      // Check if already a member
+      const existing = await storage.getOrgMembership(userId);
+      if (existing?.orgId === invite.orgId) {
+        return res.json({ message: "Ya eres miembro de esta organización", orgId: invite.orgId });
+      }
+
+      // Add to org
+      await storage.addOrgMember({ orgId: invite.orgId, userId, role: invite.role });
+      // Delete the invite token so it can't be reused
+      await storage.deleteOrgInvite(invite.id);
+
+      res.json({ message: "Te has unido a la organización correctamente", orgId: invite.orgId });
+    } catch (err: any) {
+      res.status(400).json({ message: err.message });
+    }
+  });
+
   // ──────────────────────────────────────────
   // CONVERSATIONS
   // ──────────────────────────────────────────

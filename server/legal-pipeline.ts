@@ -105,7 +105,7 @@ function findCorpusFile(): string | null {
   const paths = [
     join(process.cwd(), "server", "legal-corpus.json"),
     join(process.cwd(), "legal-corpus.json"),
-    join(__dirname, "legal-corpus.json"),
+    join(process.cwd(), "dist", "legal-corpus.json"),
   ];
   for (const p of paths) {
     if (existsSync(p)) return p;

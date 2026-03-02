@@ -19,6 +19,7 @@ import CaseDetailPage from "@/pages/CaseDetailPage";
 import AlertsPage from "@/pages/AlertsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import TeamPage from "@/pages/TeamPage";
+import InvitePage from "@/pages/InvitePage";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/" component={() => <Redirect to="/dashboard" />} />
       <Route path="/auth" component={AuthPage} />
       <Route path="/register-firm" component={RegisterFirmPage} />
+      <Route path="/invite/:token" component={InvitePage} />
       <Route path="/dashboard" component={MainDashboardPage} />
       <Route path="/dashboard/chat" component={ChatPage} />
       <Route path="/dashboard/analysis" component={AnalysisPage} />

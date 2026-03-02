@@ -2,19 +2,22 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/hooks/use-auth";
 import { Scale, ChevronRight, Mail, Lock, User } from "lucide-react";
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import { SiGoogle } from "react-icons/si";
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
   const { login, register, isLoggingIn, isRegistering, user } = useAuth();
+  const [location] = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
 
+  const redirectParam = new URLSearchParams(location.split("?")[1] ?? "").get("redirect");
+
   if (user) {
-    return <Redirect to="/dashboard" />;
+    return <Redirect to={redirectParam || "/dashboard"} />;
   }
 
   const handleSubmit = (e: React.FormEvent) => {

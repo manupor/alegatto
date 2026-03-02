@@ -76,6 +76,7 @@ export interface IStorage {
   updateOrgMemberRole(memberId: string, role: string): Promise<OrgMember>;
   removeOrgMember(memberId: string): Promise<void>;
   getOrgInvites(orgId: string): Promise<OrgInvite[]>;
+  getOrgInviteByToken(token: string): Promise<OrgInvite | undefined>;
   createOrgInvite(invite: typeof orgInvites.$inferInsert): Promise<OrgInvite>;
   deleteOrgInvite(id: string): Promise<void>;
 }
@@ -335,6 +336,11 @@ export class DatabaseStorage implements IStorage {
 
   async getOrgInvites(orgId: string): Promise<OrgInvite[]> {
     return db.select().from(orgInvites).where(eq(orgInvites.orgId, orgId)).orderBy(desc(orgInvites.createdAt));
+  }
+
+  async getOrgInviteByToken(token: string): Promise<OrgInvite | undefined> {
+    const [invite] = await db.select().from(orgInvites).where(eq(orgInvites.token, token)).limit(1);
+    return invite;
   }
 
   async createOrgInvite(invite: typeof orgInvites.$inferInsert): Promise<OrgInvite> {
