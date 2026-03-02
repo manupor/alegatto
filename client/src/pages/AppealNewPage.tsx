@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useLocation } from "wouter";
+import { queryClient } from "@/lib/queryClient";
 
 const PROCESS_TYPES = [
   { value: "civil", label: "Civil" },
@@ -74,6 +75,7 @@ export default function AppealNewPage() {
   const [generating, setGenerating] = useState(false);
   const [generatedDoc, setGeneratedDoc] = useState("");
   const [showOutput, setShowOutput] = useState(false);
+  const [savedDocId, setSavedDocId] = useState<string | null>(null);
 
   const outputRef = useRef<HTMLDivElement>(null);
 
@@ -160,7 +162,44 @@ export default function AppealNewPage() {
         setGeneratedDoc(full);
         if (outputRef.current) outputRef.current.scrollTop = outputRef.current.scrollHeight;
       }
-      toast.success("Recurso generado exitosamente");
+
+      // Auto-save appeal metadata and editor document after generation
+      try {
+        await fetch("/api/appeals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            processType, caseNumber, resolvingBody, resolutionType, resolutionDate,
+            grievances, selectedArticles, manualJurisprudence,
+            writingStyle, lawyerName, barNumber, destinationCourt,
+            status: "draft",
+          }),
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/appeals"] });
+      } catch {
+        // Non-blocking: appeal metadata save failure doesn't break the UX
+      }
+
+      try {
+        const docRes = await fetch("/api/editor/documents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            titulo: `Recurso de Apelación - Exp. ${caseNumber || "sin número"}`,
+            contenidoHtml: `<pre>${full}</pre>`,
+            tipo: "apelacion",
+          }),
+        });
+        const doc = await docRes.json();
+        if (doc?.id) {
+          setSavedDocId(doc.id);
+          queryClient.invalidateQueries({ queryKey: ["/api/editor/documents"] });
+        }
+      } catch {
+        // Non-blocking: document save failure doesn't break the UX
+      }
+
+      toast.success("Recurso generado y guardado");
     } catch (err: any) {
       toast.error(err.message || "Error generando recurso");
     } finally {
@@ -184,18 +223,22 @@ export default function AppealNewPage() {
   };
 
   const editInEditor = async () => {
+    if (savedDocId) {
+      setLocation(`/dashboard/editor/${savedDocId}`);
+      return;
+    }
     try {
       const res = await fetch("/api/editor/documents", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          titulo: `Recurso de Apelación - Exp. ${caseNumber}`,
+          titulo: `Recurso de Apelación - Exp. ${caseNumber || "sin número"}`,
           contenidoHtml: `<pre>${generatedDoc}</pre>`,
           tipo: "apelacion",
         }),
       });
       const doc = await res.json();
-      toast.success("Abriendo en editor...");
+      setSavedDocId(doc.id);
       setLocation(`/dashboard/editor/${doc.id}`);
     } catch {
       toast.error("Error al abrir en editor");
