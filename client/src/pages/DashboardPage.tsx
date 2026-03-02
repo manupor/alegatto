@@ -145,7 +145,7 @@ export default function DashboardPage() {
             </button>
           </form>
           <div className="text-center mt-3 text-xs text-muted-foreground">
-            LexAI puede cometer errores. Verifica la información importante.
+            Alegatto puede cometer errores. Verifica la información importante.
           </div>
         </div>
       </div>

@@ -44,7 +44,7 @@ export default function AuthPage() {
               <Scale className="w-7 h-7 text-primary" />
             </div>
             <div>
-              <h1 className="font-display font-bold text-3xl tracking-tight text-foreground">LexAI</h1>
+              <h1 className="font-display font-bold text-3xl tracking-tight text-foreground">Alegatto</h1>
               <p className="text-sm text-muted-foreground uppercase tracking-widest font-semibold">Costa Rica</p>
             </div>
           </div>
@@ -67,7 +67,7 @@ export default function AuthPage() {
         </div>
 
         <div className="relative z-10 flex gap-4 text-sm text-muted-foreground">
-          <span>&copy; 2024 LexAI Costa Rica.</span>
+          <span>&copy; 2024 Alegatto Costa Rica.</span>
           <a href="#" className="hover:text-primary transition-colors">Términos</a>
           <a href="#" className="hover:text-primary transition-colors">Privacidad</a>
         </div>
@@ -80,7 +80,7 @@ export default function AuthPage() {
             <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center border border-primary/30 mx-auto mb-4">
               <Scale className="w-7 h-7 text-primary" />
             </div>
-            <h1 className="font-display font-bold text-3xl tracking-tight text-foreground">LexAI</h1>
+            <h1 className="font-display font-bold text-3xl tracking-tight text-foreground">Alegatto</h1>
           </div>
 
           <div className="mb-8">

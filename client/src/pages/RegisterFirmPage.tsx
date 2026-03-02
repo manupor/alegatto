@@ -124,7 +124,7 @@ export default function RegisterFirmPage() {
             <Scale className="w-7 h-7 text-primary" />
           </div>
           <h1 className="text-3xl font-bold text-foreground">Registra tu despacho</h1>
-          <p className="text-muted-foreground mt-2">Configura tu organización en LexAI CR para empezar</p>
+          <p className="text-muted-foreground mt-2">Configura tu organización en Alegatto para empezar</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
@@ -149,7 +149,7 @@ export default function RegisterFirmPage() {
             <div>
               <label className="block text-sm text-muted-foreground mb-1.5">
                 Identificador único (slug) *
-                <span className="ml-2 text-xs text-muted-foreground">lexai.cr/<span className="text-foreground">{slug || "tu-despacho"}</span></span>
+                <span className="ml-2 text-xs text-muted-foreground">alegatto.com/<span className="text-foreground">{slug || "tu-despacho"}</span></span>
               </label>
               <div className="relative">
                 <input

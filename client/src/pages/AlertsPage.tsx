@@ -44,7 +44,7 @@ function AddDeadlineModal({ onClose }: { onClose: () => void }) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/deadlines"] });
       setSaved(true);
-      toast.success("Alerta guardada en LexAI CR");
+      toast.success("Alerta guardada en Alegatto");
     },
   });
 
@@ -91,7 +91,7 @@ function AddDeadlineModal({ onClose }: { onClose: () => void }) {
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//LexAI CR//ES",
+      "PRODID:-//Alegatto//ES",
       "BEGIN:VEVENT",
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${dateStr}`,
@@ -101,17 +101,17 @@ function AddDeadlineModal({ onClose }: { onClose: () => void }) {
       "BEGIN:VALARM",
       "TRIGGER:-P1D",
       "ACTION:DISPLAY",
-      "DESCRIPTION:Recordatorio LexAI CR – mañana vence el plazo",
+      "DESCRIPTION:Recordatorio Alegatto – mañana vence el plazo",
       "END:VALARM",
       "BEGIN:VALARM",
       `TRIGGER:${sevenDaysBefore}`,
       "ACTION:DISPLAY",
-      "DESCRIPTION:Recordatorio LexAI CR – faltan 7 días para el plazo",
+      "DESCRIPTION:Recordatorio Alegatto – faltan 7 días para el plazo",
       "END:VALARM",
       "BEGIN:VALARM",
       "TRIGGER:-PT2H",
       "ACTION:DISPLAY",
-      "DESCRIPTION:Recordatorio LexAI CR – el plazo vence hoy en 2 horas",
+      "DESCRIPTION:Recordatorio Alegatto – el plazo vence hoy en 2 horas",
       "END:VALARM",
       "END:VEVENT",
       "END:VCALENDAR",
@@ -203,7 +203,7 @@ function AddDeadlineModal({ onClose }: { onClose: () => void }) {
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 mb-4">
                 <Check className="w-5 h-5 text-emerald-400 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-emerald-400">Alerta guardada en LexAI CR</p>
+                  <p className="text-sm font-medium text-emerald-400">Alerta guardada en Alegatto</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {format(new Date(form.dueDate + "T12:00:00"), "d 'de' MMMM, yyyy", { locale: es })}
                   </p>

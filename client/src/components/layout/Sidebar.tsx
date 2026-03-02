@@ -61,7 +61,7 @@ export function Sidebar() {
             <Scale className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="font-bold text-lg tracking-tight text-foreground">LexAI</h1>
+            <h1 className="font-bold text-lg tracking-tight text-foreground">Alegatto</h1>
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Costa Rica</p>
           </div>
         </div>

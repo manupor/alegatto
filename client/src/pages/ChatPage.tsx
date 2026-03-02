@@ -396,7 +396,7 @@ export default function ChatPage() {
             </button>
           </form>
           <p className="text-center mt-2 text-xs text-muted-foreground">
-            LexAI CR busca en 4.481 artículos de 8 leyes costarricenses · Verifica la información con un abogado
+            Alegatto busca en 4.481 artículos de 8 leyes costarricenses · Verifica la información con un abogado
           </p>
         </div>
       </div>

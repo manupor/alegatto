@@ -352,18 +352,18 @@ export default function AnalysisPage() {
         body: JSON.stringify({ description: reminderDesc, dueDate: reminderDate, status: "pending" }),
       });
       queryClient.invalidateQueries({ queryKey: ["/api/deadlines"] });
-      toast.success("Recordatorio guardado en LexAI");
+      toast.success("Recordatorio guardado en Alegatto");
 
       // Browser push notification (if permission granted)
       if (Notification.permission === "granted") {
-        new Notification("LexAI CR — Recordatorio de Apelación", {
+        new Notification("Alegatto — Recordatorio de Apelación", {
           body: `Fecha límite: ${new Date(reminderDate + "T12:00:00").toLocaleDateString("es-CR", { day: "numeric", month: "long", year: "numeric" })}`,
           icon: "/favicon.ico",
         });
       } else if (Notification.permission !== "denied") {
         const perm = await Notification.requestPermission();
         if (perm === "granted") {
-          new Notification("LexAI CR — Recordatorio guardado", {
+          new Notification("Alegatto — Recordatorio guardado", {
             body: `Fecha límite: ${new Date(reminderDate + "T12:00:00").toLocaleDateString("es-CR", { day: "numeric", month: "long", year: "numeric" })}`,
             icon: "/favicon.ico",
           });
@@ -420,7 +420,7 @@ export default function AnalysisPage() {
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//LexAI CR//ES",
+      "PRODID:-//Alegatto//ES",
       "BEGIN:VEVENT",
       `DTSTAMP:${now}`,
       `DTSTART;VALUE=DATE:${dateStr}`,
@@ -430,7 +430,7 @@ export default function AnalysisPage() {
       "BEGIN:VALARM",
       "TRIGGER:-P1D",
       "ACTION:DISPLAY",
-      "DESCRIPTION:Recordatorio LexAI CR",
+      "DESCRIPTION:Recordatorio Alegatto",
       "END:VALARM",
       "END:VEVENT",
       "END:VCALENDAR",
@@ -469,9 +469,9 @@ export default function AnalysisPage() {
         });
 
       const doc = new Document({
-        creator: "LexAI CR",
+        creator: "Alegatto",
         title: `Análisis Legal – ${filename}`,
-        description: "Análisis generado por LexAI CR",
+        description: "Análisis generado por Alegatto",
         sections: [
           {
             children: [
@@ -481,7 +481,7 @@ export default function AnalysisPage() {
                 spacing: { after: 60 },
               }),
               new Paragraph({
-                children: [new TextRun({ text: "LexAI CR — Asistente Jurídico Inteligente", size: 22, color: "64748B" })],
+                children: [new TextRun({ text: "Alegatto — Asistente Jurídico Inteligente", size: 22, color: "64748B" })],
                 alignment: AlignmentType.CENTER,
                 spacing: { after: 60 },
               }),
@@ -566,7 +566,7 @@ export default function AnalysisPage() {
                 spacing: { before: 400 },
               }),
               new Paragraph({
-                children: [new TextRun({ text: "Generado por LexAI CR · lexai.cr", color: "64748B", size: 18, italics: true })],
+                children: [new TextRun({ text: "Generado por Alegatto · alegatto.com", color: "64748B", size: 18, italics: true })],
                 alignment: AlignmentType.CENTER,
               }),
             ],
@@ -621,7 +621,7 @@ export default function AnalysisPage() {
 </head>
 <body>
   <div class="header">
-    <div class="logo">LexAI CR</div>
+    <div class="logo">Alegatto</div>
     <div class="subtitle">Asistente Jurídico Inteligente para Costa Rica</div>
     <div class="meta">Archivo: ${filename} &nbsp;·&nbsp; ${new Date().toLocaleDateString("es-CR", { year: "numeric", month: "long", day: "numeric" })}</div>
   </div>
@@ -664,7 +664,7 @@ export default function AnalysisPage() {
   <h2>Artículos Relevantes</h2>
   <div class="pills">${analysis.relevant_articles.map(a => `<span class="pill">${a}</span>`).join("")}</div>` : ""}
 
-  <div class="footer">Generado por LexAI CR · lexai.cr</div>
+  <div class="footer">Generado por Alegatto · alegatto.com</div>
 </body>
 </html>`;
 
@@ -1005,7 +1005,7 @@ export default function AnalysisPage() {
 
                 {/* Actions */}
                 <div className="grid grid-cols-1 gap-2 pt-1">
-                  {/* Save in LexAI (primary) */}
+                  {/* Save in Alegatto (primary) */}
                   <button
                     onClick={saveReminderInApp}
                     disabled={reminderSaving}
@@ -1013,7 +1013,7 @@ export default function AnalysisPage() {
                     data-testid="button-save-reminder-app"
                   >
                     {reminderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
-                    Guardar en LexAI + Notificación
+                    Guardar en Alegatto + Notificación
                   </button>
 
                   {/* Google Calendar — smart section */}

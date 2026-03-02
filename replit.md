@@ -1,7 +1,7 @@
-# LexAI CR — Legal AI SaaS for Costa Rica
+# Alegatto — Legal AI SaaS for Costa Rica
 
 ## Overview
-Full-stack legal AI SaaS platform for Costa Rica built with React + Express + PostgreSQL (with pgvector for semantic search). Dark theme (#0f172a background, #1e293b cards, #10B981 emerald accent).
+Full-stack legal AI SaaS platform for Costa Rica built with React + Express + PostgreSQL (with pgvector for semantic search). Dark theme (#0f172a background, #1e293b cards, #10B981 emerald accent). Formerly named "LexAI CR".
 
 ## Architecture
 - **Frontend**: React + Vite, TypeScript, TailwindCSS, shadcn/ui, Wouter routing, TanStack Query

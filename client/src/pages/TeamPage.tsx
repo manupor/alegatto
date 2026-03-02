@@ -118,7 +118,7 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
             </div>
             {!emailSent && (
               <a
-                href={`mailto:${email}?subject=${encodeURIComponent("Invitación a LexAI CR")}&body=${encodeURIComponent(`Hola,\n\nTe invito a unirte a nuestro despacho en LexAI CR, la plataforma legal con inteligencia artificial.\n\nHaz clic en el siguiente enlace para aceptar la invitación:\n${inviteLink}\n\nEste enlace es de uso único.\n\nSaludos.`)}`}
+                href={`mailto:${email}?subject=${encodeURIComponent("Invitación a Alegatto")}&body=${encodeURIComponent(`Hola,\n\nTe invito a unirte a nuestro despacho en Alegatto, la plataforma legal con inteligencia artificial.\n\nHaz clic en el siguiente enlace para aceptar la invitación:\n${inviteLink}\n\nEste enlace es de uso único.\n\nSaludos.`)}`}
                 data-testid="link-send-email"
                 className="w-full py-2.5 rounded-lg border border-primary text-primary text-sm font-semibold text-center flex items-center justify-center gap-2 hover:bg-primary/10 transition-colors"
               >

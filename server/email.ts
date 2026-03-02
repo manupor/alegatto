@@ -2,7 +2,7 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-const FROM = "LexAI CR <onboarding@resend.dev>";
+const FROM = "Alegatto <onboarding@resend.dev>";
 
 export async function sendInviteEmail({
   toEmail,
@@ -25,7 +25,7 @@ export async function sendInviteEmail({
   const { data, error } = await resend.emails.send({
     from: FROM,
     to: toEmail,
-    subject: `Invitación a unirte a ${orgName} en LexAI CR`,
+    subject: `Invitación a unirte a ${orgName} en Alegatto`,
     html: `
 <!DOCTYPE html>
 <html lang="es">
@@ -37,7 +37,7 @@ export async function sendInviteEmail({
         <!-- Header -->
         <tr>
           <td style="background:linear-gradient(135deg,#064e3b,#065f46);padding:32px 40px;text-align:center;">
-            <h1 style="margin:0;color:#10b981;font-size:28px;font-weight:700;letter-spacing:-0.5px;">LexAI CR</h1>
+            <h1 style="margin:0;color:#10b981;font-size:28px;font-weight:700;letter-spacing:-0.5px;">Alegatto</h1>
             <p style="margin:8px 0 0;color:#6ee7b7;font-size:14px;">Plataforma de IA Legal para Costa Rica</p>
           </td>
         </tr>
@@ -46,11 +46,11 @@ export async function sendInviteEmail({
           <td style="padding:40px;">
             <h2 style="margin:0 0 16px;color:#f1f5f9;font-size:22px;font-weight:600;">Fuiste invitado a unirte</h2>
             <p style="margin:0 0 24px;color:#94a3b8;font-size:15px;line-height:1.6;">
-              Has sido invitado a unirte al despacho <strong style="color:#e2e8f0;">${orgName}</strong> en LexAI CR
+              Has sido invitado a unirte al despacho <strong style="color:#e2e8f0;">${orgName}</strong> en Alegatto
               con el rol de <strong style="color:#10b981;">${roleLabel[role] ?? role}</strong>.
             </p>
             <p style="margin:0 0 32px;color:#94a3b8;font-size:15px;line-height:1.6;">
-              LexAI CR es la plataforma de inteligencia artificial diseñada para abogados costarricenses —
+              Alegatto es la plataforma de inteligencia artificial diseñada para abogados costarricenses —
               con acceso a toda la normativa nacional, generador de recursos, gestión de expedientes y mucho más.
             </p>
             <!-- CTA Button -->
@@ -74,7 +74,7 @@ export async function sendInviteEmail({
         <tr>
           <td style="background-color:#0f172a;padding:20px 40px;text-align:center;">
             <p style="margin:0;color:#475569;font-size:12px;">
-              © 2026 LexAI CR · Este correo fue enviado porque alguien te invitó a su despacho.<br>
+              © 2026 Alegatto · Este correo fue enviado porque alguien te invitó a su despacho.<br>
               Si no esperabas esta invitación, podés ignorar este correo.
             </p>
           </td>

@@ -96,7 +96,7 @@ export default function InvitePage() {
           <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
             <Users className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">LexAI CR</h1>
+          <h1 className="text-2xl font-bold text-foreground">Alegatto</h1>
           <p className="text-muted-foreground text-sm mt-1">Plataforma Legal con IA</p>
         </div>
 
@@ -141,7 +141,7 @@ export default function InvitePage() {
             <div>
               <h2 className="text-xl font-semibold text-foreground mb-2">Invitación al equipo</h2>
               <p className="text-muted-foreground text-sm mb-6">
-                Has sido invitado a unirte al despacho en LexAI CR.
+                Has sido invitado a unirte al despacho en Alegatto.
               </p>
 
               <div className="bg-background rounded-xl border border-border p-4 mb-6 space-y-3">
