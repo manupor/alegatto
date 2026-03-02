@@ -461,10 +461,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
 
       const analysis = JSON.parse(completion.choices[0]?.message?.content || "{}");
-      res.json({ analysis, filename: req.file.originalname });
+      res.json({ analysis, filename: req.file.originalname, docText: extractedText.substring(0, 14000) });
     } catch (err: any) {
       console.error("Analysis error:", err);
       res.status(500).json({ message: "Error al analizar: " + err.message });
+    }
+  });
+
+  // ──────────────────────────────────────────
+  // DOCUMENT Q&A CHAT
+  // ──────────────────────────────────────────
+  app.post("/api/document-chat", async (req, res) => {
+    try {
+      const { question, docText, filename, history } = z.object({
+        question: z.string().min(1).max(1000),
+        docText: z.string().min(1).max(14000),
+        filename: z.string().optional(),
+        history: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })).optional(),
+      }).parse(req.body);
+
+      const messages: any[] = [
+        {
+          role: "system",
+          content: `Eres un asistente legal experto en derecho costarricense. El usuario ha subido el documento "${filename ?? "sin nombre"}" y tiene preguntas sobre su contenido.
+
+CONTENIDO DEL DOCUMENTO:
+${docText}
+
+Responde de forma clara, precisa y en español. Si la pregunta no se puede responder con el contenido del documento, indícalo. Cita párrafos o secciones específicas cuando sea útil.`,
+        },
+        ...(history ?? []),
+        { role: "user", content: question },
+      ];
+
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        max_tokens: 1000,
+        temperature: 0.2,
+      });
+
+      const answer = completion.choices[0]?.message?.content ?? "No pude generar una respuesta.";
+      res.json({ answer, tokensUsed: completion.usage?.total_tokens ?? 0 });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ message: "Datos inválidos" });
+      console.error("Document chat error:", err);
+      res.status(500).json({ message: "Error al procesar la pregunta: " + err.message });
     }
   });
 

@@ -1,11 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, FileText, AlertTriangle, ChevronDown, ChevronUp,
   Download, FolderPlus, Loader2, Shield, Users, BookOpen,
-  CheckCircle, XCircle, Info, Gavel
+  CheckCircle, XCircle, Info, Gavel, MessageSquare, Send, Bot, User
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -24,11 +24,24 @@ interface AnalysisResult {
   executive_summary: string;
 }
 
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 const RISK_CONFIG = {
   low: { label: "Bajo", color: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/30", icon: CheckCircle },
   medium: { label: "Medio", color: "text-yellow-400", bg: "bg-yellow-500/10 border-yellow-500/30", icon: Info },
   high: { label: "Alto", color: "text-red-400", bg: "bg-red-500/10 border-red-500/30", icon: XCircle },
 };
+
+const SUGGESTED_QUESTIONS = [
+  "¿Cuáles son los principales riesgos del documento?",
+  "¿Qué obligaciones tiene cada parte?",
+  "¿Hay cláusulas desfavorables para el cliente?",
+  "¿Qué artículos legales aplican a este caso?",
+  "¿Qué pasos recomiendas seguir?",
+];
 
 function CollapsibleSection({ title, icon: Icon, children, defaultOpen = false }: {
   title: string; icon: any; children: React.ReactNode; defaultOpen?: boolean;
@@ -62,9 +75,179 @@ function CollapsibleSection({ title, icon: Icon, children, defaultOpen = false }
   );
 }
 
+function DocumentChatPanel({ docText, filename }: { docText: string; filename: string }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, isLoading]);
+
+  const sendQuestion = useCallback(async (question: string) => {
+    if (!question.trim() || isLoading) return;
+
+    const userMsg: ChatMessage = { role: "user", content: question };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/document-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          docText,
+          filename,
+          history: messages.slice(-6),
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Error al obtener respuesta");
+      }
+
+      const data = await res.json();
+      setMessages(prev => [...prev, { role: "assistant", content: data.answer }]);
+    } catch (err: any) {
+      toast.error(err.message || "Error al procesar la pregunta");
+      setMessages(prev => [...prev, {
+        role: "assistant",
+        content: "Lo siento, hubo un error al procesar tu pregunta. Por favor intenta de nuevo.",
+      }]);
+    } finally {
+      setIsLoading(false);
+      inputRef.current?.focus();
+    }
+  }, [docText, filename, messages, isLoading]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendQuestion(input);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: 0.15 }}
+      className="rounded-2xl border border-primary/25 bg-card overflow-hidden"
+    >
+      {/* Header */}
+      <div className="flex items-center gap-3 px-5 py-4 border-b border-border bg-primary/5">
+        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+          <MessageSquare className="w-4 h-4 text-primary" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-foreground text-sm">Preguntas sobre el documento</h3>
+          <p className="text-xs text-muted-foreground">{filename}</p>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="h-80 overflow-y-auto p-4 space-y-4 scroll-smooth">
+        {messages.length === 0 ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+              <Bot className="w-6 h-6 text-primary" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground mb-1">¿Tiene preguntas sobre este documento?</p>
+              <p className="text-xs text-muted-foreground">Pregúnteme cualquier cosa sobre el contenido</p>
+            </div>
+            <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+              {SUGGESTED_QUESTIONS.map((q, i) => (
+                <button
+                  key={i}
+                  onClick={() => sendQuestion(q)}
+                  disabled={isLoading}
+                  className="text-xs px-3 py-1.5 rounded-full bg-secondary border border-border text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-secondary/80 transition-all disabled:opacity-50"
+                  data-testid={`button-suggested-q-${i}`}
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {messages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+              >
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5
+                  ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary border border-border"}`}
+                >
+                  {msg.role === "user"
+                    ? <User className="w-3.5 h-3.5" />
+                    : <Bot className="w-3.5 h-3.5 text-primary" />}
+                </div>
+                <div
+                  className={`max-w-[78%] px-4 py-3 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap
+                    ${msg.role === "user"
+                      ? "bg-primary text-primary-foreground rounded-tr-sm"
+                      : "bg-secondary border border-border text-foreground rounded-tl-sm"}`}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+
+            {isLoading && (
+              <div className="flex gap-3">
+                <div className="w-7 h-7 rounded-full bg-secondary border border-border flex items-center justify-center shrink-0">
+                  <Bot className="w-3.5 h-3.5 text-primary" />
+                </div>
+                <div className="bg-secondary border border-border px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce [animation-delay:0ms]" />
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce [animation-delay:150ms]" />
+                  <span className="w-2 h-2 rounded-full bg-primary animate-bounce [animation-delay:300ms]" />
+                </div>
+              </div>
+            )}
+            <div ref={bottomRef} />
+          </>
+        )}
+      </div>
+
+      {/* Input */}
+      <div className="border-t border-border p-3 flex gap-2 items-end">
+        <textarea
+          ref={inputRef}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Escribe tu pregunta sobre el documento… (Enter para enviar)"
+          disabled={isLoading}
+          rows={1}
+          className="flex-1 resize-none bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/50 disabled:opacity-50 max-h-28 overflow-y-auto"
+          style={{ fieldSizing: "content" } as any}
+          data-testid="input-document-question"
+        />
+        <button
+          onClick={() => sendQuestion(input)}
+          disabled={!input.trim() || isLoading}
+          className="w-9 h-9 rounded-xl bg-primary text-primary-foreground flex items-center justify-center shrink-0 hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+          data-testid="button-send-document-question"
+        >
+          {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
 export default function AnalysisPage() {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [filename, setFilename] = useState("");
+  const [docText, setDocText] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onDrop = useCallback(async (accepted: File[]) => {
@@ -72,6 +255,7 @@ export default function AnalysisPage() {
     if (!file) return;
     setLoading(true);
     setAnalysis(null);
+    setDocText("");
 
     const formData = new FormData();
     formData.append("file", file);
@@ -85,6 +269,7 @@ export default function AnalysisPage() {
       const data = await res.json();
       setAnalysis(data.analysis);
       setFilename(data.filename);
+      setDocText(data.docText ?? "");
       toast.success("Documento analizado exitosamente");
     } catch (err: any) {
       toast.error(err.message || "Error al analizar el documento");
@@ -270,7 +455,7 @@ ${analysis.relevant_articles.join(", ")}
                   </div>
                 )}
 
-                {/* Omissions - highlighted */}
+                {/* Omissions */}
                 {analysis.detected_omissions.length > 0 && (
                   <div className="rounded-xl border border-yellow-500/40 bg-yellow-500/5 p-5">
                     <h3 className="font-semibold text-yellow-400 mb-3 flex items-center gap-2">
@@ -341,6 +526,11 @@ ${analysis.relevant_articles.join(", ")}
                       ))}
                     </div>
                   </CollapsibleSection>
+                )}
+
+                {/* Document Q&A Chat */}
+                {docText && (
+                  <DocumentChatPanel docText={docText} filename={filename} />
                 )}
               </motion.div>
             )}
