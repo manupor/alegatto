@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { Loader2, Users, CheckCircle, XCircle, LogIn } from "lucide-react";
+import { queryClient } from "@/lib/queryClient";
 
 interface InviteData {
   invite: {
@@ -17,7 +18,8 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "Administrador",
   senior: "Abogado Senior",
   junior: "Abogado Junior",
-  assistant: "Asistente",
+  assistant: "Asociado",
+  intern: "Pasante",
   readonly: "Solo lectura",
 };
 
@@ -63,7 +65,11 @@ export default function InvitePage() {
         return;
       }
       setSuccess(true);
-      setTimeout(() => setLocation("/dashboard"), 2000);
+      // Invalidate org context + auth so dashboard loads the new org
+      await queryClient.invalidateQueries({ queryKey: ["/api/org/context"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/org/context"] });
+      setTimeout(() => setLocation("/dashboard"), 1500);
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
     } finally {
@@ -110,35 +116,37 @@ export default function InvitePage() {
           ) : success ? (
             <div className="text-center">
               <CheckCircle className="w-12 h-12 text-green-500 mx-auto mb-4" />
-              <h2 className="text-lg font-semibold text-foreground mb-2">¡Bienvenido!</h2>
+              <h2 className="text-lg font-semibold text-foreground mb-2">¡Bienvenido al equipo!</h2>
               <p className="text-muted-foreground text-sm">
-                Te has unido a <strong>{inviteData?.orgName}</strong> correctamente. Redirigiendo al dashboard…
+                Te has unido a <strong>{inviteData?.orgName}</strong> correctamente.
+                <br />Redirigiendo al dashboard…
               </p>
+              <Loader2 className="w-5 h-5 animate-spin text-primary mx-auto mt-4" />
             </div>
           ) : authRequired ? (
             <div className="text-center">
               <LogIn className="w-12 h-12 text-primary mx-auto mb-4" />
               <h2 className="text-lg font-semibold text-foreground mb-2">Inicia sesión primero</h2>
               <p className="text-muted-foreground text-sm mb-6">
-                Debes iniciar sesión o crear una cuenta para aceptar la invitación a <strong>{inviteData?.orgName}</strong>.
+                Debes iniciar sesión o crear una cuenta para unirte a <strong>{inviteData?.orgName}</strong>.
               </p>
               <button
                 onClick={goToLogin}
                 className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
               >
-                Iniciar sesión
+                Iniciar sesión / Registrarse
               </button>
             </div>
           ) : inviteData ? (
             <div>
               <h2 className="text-xl font-semibold text-foreground mb-2">Invitación al equipo</h2>
               <p className="text-muted-foreground text-sm mb-6">
-                Has sido invitado a unirte a la organización:
+                Has sido invitado a unirte al despacho en LexAI CR.
               </p>
 
               <div className="bg-background rounded-xl border border-border p-4 mb-6 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Organización</span>
+                  <span className="text-sm text-muted-foreground">Despacho</span>
                   <span className="text-sm font-semibold text-foreground">{inviteData.orgName}</span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -148,7 +156,7 @@ export default function InvitePage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Invitado a</span>
+                  <span className="text-sm text-muted-foreground">Para</span>
                   <span className="text-sm text-foreground">{inviteData.invite.email}</span>
                 </div>
               </div>
@@ -157,7 +165,7 @@ export default function InvitePage() {
                 onClick={handleAccept}
                 disabled={accepting}
                 data-testid="button-accept-invite"
-                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-xl bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors disabled:opacity-60 flex items-center justify-center gap-2 mb-3"
               >
                 {accepting ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Procesando…</>
@@ -166,8 +174,8 @@ export default function InvitePage() {
                 )}
               </button>
 
-              <p className="text-xs text-muted-foreground text-center mt-4">
-                Al aceptar, quedarás vinculado a esta organización en LexAI CR.
+              <p className="text-xs text-muted-foreground text-center">
+                Solo el administrador del despacho puede modificar roles y perfiles de los miembros.
               </p>
             </div>
           ) : null}
