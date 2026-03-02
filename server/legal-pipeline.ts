@@ -488,6 +488,60 @@ async function layerC(prompt: string, materias: string[] | undefined, alreadyFou
   }
 }
 
+// ── LAYER D: Broad in-memory keyword fallback ─────────────
+// Fires only when A+B+C return zero results.
+// Scans all 4,482 in-memory articles and returns the most relevant ones
+// based on raw keyword overlap — guarantees the AI always has corpus context.
+
+function layerD(prompt: string, alreadyFoundIds: Set<string>, limit = 5): LegalArticle[] {
+  const stopwords = new Set([
+    "que", "como", "cual", "cuales", "donde", "cuando", "quien", "quienes",
+    "el", "la", "los", "las", "un", "una", "unos", "unas", "del", "al",
+    "en", "de", "con", "por", "para", "sobre", "entre", "hacia", "desde",
+    "es", "son", "fue", "ser", "estar", "tiene", "hay", "puede", "debe",
+    "se", "su", "sus", "mi", "me", "le", "lo", "nos", "les",
+    "y", "o", "pero", "si", "no", "ni", "mas", "ya", "muy", "todo", "toda",
+    "este", "esta", "estos", "estas", "ese", "esa", "esos", "esas",
+    "dice", "establece", "indica", "menciona", "segun", "respecto",
+    "costarricense", "articulo", "ley", "codigo", "norma", "derecho",
+  ]);
+
+  const words = normalizeText(prompt)
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !stopwords.has(w));
+
+  const seen = new Set<string>(alreadyFoundIds);
+
+  if (words.length === 0) {
+    // Ultra-fallback: return first articles from Constitución
+    const constArts =
+      codeCache["Constitución Política de Costa Rica (1949)"] ||
+      Object.values(codeCache)[0] ||
+      [];
+    return constArts.filter(a => !seen.has(a.id)).slice(0, limit);
+  }
+
+  const scored: { art: LegalArticle; score: number }[] = [];
+
+  for (const fuente of Object.keys(codeCache)) {
+    for (const art of codeCache[fuente]) {
+      if (seen.has(art.id)) continue;
+      const nc = normalizeText(art.contenido);
+      let score = 0;
+      for (const w of words) {
+        if (nc.includes(w)) score++;
+      }
+      if (score > 0) {
+        scored.push({ art, score });
+        seen.add(art.id);
+      }
+    }
+  }
+
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map(s => s.art);
+}
+
 // ── Context assembly ─────────────────────────────────────
 
 function dedup(articles: LegalArticle[]): LegalArticle[] {
@@ -499,8 +553,8 @@ function dedup(articles: LegalArticle[]): LegalArticle[] {
   });
 }
 
-function assembleContext(a: LegalArticle[], b: LegalArticle[], c: LegalArticle[]): string {
-  const all = dedup([...a, ...b, ...c]);
+function assembleContext(a: LegalArticle[], b: LegalArticle[], c: LegalArticle[], d: LegalArticle[]): string {
+  const all = dedup([...a, ...b, ...c, ...d]);
   if (all.length === 0) return "";
 
   let ctx = "═══ CONTEXTO LEGAL DE COSTA RICA (GROUND TRUTH) ═══\n\n";
@@ -543,17 +597,17 @@ function detectMode(prompt: string): { isAnalysis: boolean; isReview: boolean } 
 export const LEGAL_SYSTEM_PROMPT = `Eres Alegatto, asistente legal IA especializado en el ordenamiento jurídico de Costa Rica. Ayudas a abogados y profesionales del derecho costarricense.
 
 REGLAS FUNDAMENTALES:
-1. Responde SIEMPRE en español formal jurídico costarricense
-2. Cuando el contexto legal (GROUND TRUTH) incluye artículos relevantes, cítalos textualmente y priorízalos en tu respuesta
-3. Si el contexto no cubre la pregunta completamente, responde usando tu conocimiento del derecho costarricense pero indica claramente: "⚠️ No encontré este artículo en mi base de datos local. Te recomiendo verificar el texto exacto en SINALEVI (www.pgrweb.go.cr/scij)"
-4. NUNCA inventes números de artículo ni cites artículos específicos que no estén en el contexto provisto. Podés describir el marco legal general sin citar artículos inventados
-5. Estructura: (a) norma aplicable, (b) análisis, (c) recomendaciones prácticas
+1. Responde SIEMPRE en español formal jurídico costarricense.
+2. SIEMPRE recibirás un bloque "CONTEXTO LEGAL DE COSTA RICA (GROUND TRUTH)" con artículos reales de los códigos costarricenses. Cítalos textualmente y construye tu análisis sobre ellos.
+3. Si los artículos del contexto no responden exactamente la pregunta, úsalos de marco de referencia y complementa con tu conocimiento del derecho costarricense. NUNCA digas que no tenés información — siempre tenés contexto del corpus legal.
+4. NUNCA inventes números de artículo que no estén en el contexto provisto. Citá únicamente los que aparecen en el GROUND TRUTH.
+5. Estructura: (a) norma aplicable citada del contexto, (b) análisis jurídico, (c) recomendaciones prácticas.
 
 FORMATO DE CIERRE:
 ---
 **Materia**: [CONSTITUCIONAL/CIVIL/PENAL/PROCESAL_PENAL/COMERCIAL/ADMINISTRATIVO/TRANSITO/PROCESAL_CIVIL]
 **Riesgo Procesal**: [BAJO/MEDIO/ALTO/N_A]
-**Normativa citada**: [artículos citados o "Ver SINALEVI" si no se encontraron en la base de datos]`;
+**Normativa citada**: [artículos del contexto citados]`;
 
 // ── Main pipeline ─────────────────────────────────────────
 
@@ -561,7 +615,7 @@ export async function runLegalPipeline(
   prompt: string,
   historyMessages: { role: string; content: string }[],
   materias: string[] | undefined,
-): Promise<{ groundedMessage: string; contextStr: string; layerStats: { a: number; b: number; c: number } }> {
+): Promise<{ groundedMessage: string; contextStr: string; layerStats: { a: number; b: number; c: number; d: number } }> {
   await ensureCacheLoaded();
 
   const layerAResults = await layerA(prompt, historyMessages);
@@ -571,8 +625,13 @@ export async function runLegalPipeline(
   for (const r of layerBResults) foundIds.add(r.id);
 
   const layerCResults = await layerC(prompt, materias, foundIds, 5);
+  for (const r of layerCResults) foundIds.add(r.id);
 
-  const contextStr = assembleContext(layerAResults, layerBResults, layerCResults);
+  // Layer D: always-on fallback — fires when A+B+C found nothing
+  const totalABC = layerAResults.length + layerBResults.length + layerCResults.length;
+  const layerDResults = totalABC === 0 ? layerD(prompt, foundIds, 5) : [];
+
+  const contextStr = assembleContext(layerAResults, layerBResults, layerCResults, layerDResults);
   const { isAnalysis, isReview } = detectMode(prompt);
 
   let modeInstructions = "";
@@ -583,13 +642,15 @@ export async function runLegalPipeline(
     modeInstructions += "\n\n[MODO REVISIÓN: Identifica plazos, prescripciones y riesgos procesales.]";
   }
 
-  const groundedMessage = contextStr
-    ? `📚 ${contextStr}${modeInstructions}\n\nCONSULTA DEL USUARIO: ${prompt}`
-    : `${modeInstructions ? modeInstructions + "\n\n" : ""}CONSULTA DEL USUARIO: ${prompt}`;
+  if (layerDResults.length > 0) {
+    console.log(`[Pipeline] Layers A+B+C returned 0 → Layer D fallback activated (${layerDResults.length} articles)`);
+  }
+
+  const groundedMessage = `📚 ${contextStr}${modeInstructions}\n\nCONSULTA DEL USUARIO: ${prompt}`;
 
   return {
     groundedMessage,
     contextStr,
-    layerStats: { a: layerAResults.length, b: layerBResults.length, c: layerCResults.length },
+    layerStats: { a: layerAResults.length, b: layerBResults.length, c: layerCResults.length, d: layerDResults.length },
   };
 }

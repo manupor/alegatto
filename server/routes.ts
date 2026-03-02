@@ -532,7 +532,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Run the 3-layer retrieval pipeline
       const { groundedMessage, contextStr, layerStats } = await runLegalPipeline(prompt, historyMsgs, materias);
 
-      console.log(`[Chat] Pipeline stats — A:${layerStats.a} B:${layerStats.b} C:${layerStats.c} articles | context=${contextStr.length} chars`);
+      console.log(`[Chat] Pipeline stats — A:${layerStats.a} B:${layerStats.b} C:${layerStats.c} D:${(layerStats as any).d ?? 0} articles | context=${contextStr.length} chars`);
       if (contextStr.length > 0) {
         const artRefs = contextStr.match(/Artículo\s+[\d]+/g) || [];
         console.log(`[Chat] Context articles: ${artRefs.join(", ")}`);
