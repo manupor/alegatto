@@ -1,38 +1,43 @@
-import { TouchableOpacity, ViewStyle } from "react-native";
+import { TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { type LucideIcon } from "lucide-react-native";
+import { colors } from "../lib/theme";
 
 interface FABProps {
   icon: LucideIcon;
   onPress: () => void;
-  style?: ViewStyle;
 }
 
-export default function FAB({ icon: Icon, onPress, style }: FABProps) {
+export default function FAB({ icon: Icon, onPress }: FABProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      activeOpacity={0.8}
-      style={[
-        {
-          position: "absolute",
-          bottom: 24,
-          right: 24,
-          width: 56,
-          height: 56,
-          borderRadius: 28,
-          backgroundColor: "#10B981",
-          justifyContent: "center",
-          alignItems: "center",
-          shadowColor: "#000",
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.3,
-          shadowRadius: 6,
-          elevation: 8,
-        },
-        style,
-      ]}
+      activeOpacity={0.85}
+      style={styles.fab}
     >
-      <Icon size={24} color="#f8fafc" />
+      <Icon size={24} color="#fff" strokeWidth={2.5} />
     </TouchableOpacity>
   );
 }
+
+const styles = StyleSheet.create({
+  fab: {
+    position: "absolute",
+    bottom: 28,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.accent,
+    justifyContent: "center",
+    alignItems: "center",
+    ...Platform.select({
+      ios: {
+        shadowColor: "#10B981",
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.45,
+        shadowRadius: 16,
+      },
+      android: { elevation: 10 },
+    }),
+  },
+});

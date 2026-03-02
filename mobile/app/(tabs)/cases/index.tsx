@@ -7,7 +7,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   ActivityIndicator,
+  StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Search, ChevronRight, Briefcase, Plus } from "lucide-react-native";
@@ -23,7 +25,7 @@ type FilterStatus = "all" | "active" | "appeal" | "closed";
 const filterOptions: { key: FilterStatus; label: string }[] = [
   { key: "all", label: "Todos" },
   { key: "active", label: "Activo" },
-  { key: "appeal", label: "En Apelación" },
+  { key: "appeal", label: "Apelación" },
   { key: "closed", label: "Cerrado" },
 ];
 
@@ -43,34 +45,15 @@ function getStatusVariant(status: string): "success" | "warning" | "default" {
 
 function getStatusLabel(status: string): string {
   switch (status.toLowerCase()) {
-    case "active":
-      return "Activo";
-    case "appeal":
-      return "En Apelación";
-    case "closed":
-      return "Cerrado";
-    default:
-      return status;
+    case "active": return "Activo";
+    case "appeal": return "En Apelación";
+    case "closed": return "Cerrado";
+    default: return status;
   }
 }
 
-function getLegalAreaVariant(area: string): string {
-  const map: Record<string, string> = {
-    penal: "penal",
-    civil: "civil",
-    laboral: "laboral",
-    comercial: "comercial",
-    constitucional: "constitucional",
-    administrativo: "administrativo",
-    transito: "transito",
-    tránsito: "transito",
-  };
-  return map[area.toLowerCase()] || "info";
-}
-
 function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  return d.toLocaleDateString("es-CR", {
+  return new Date(dateStr).toLocaleDateString("es-CR", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -79,170 +62,110 @@ function formatDate(dateStr: string): string {
 
 export default function CasesScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterStatus>("all");
 
-  const {
-    data: cases,
-    isLoading,
-    refetch,
-    isRefetching,
-  } = useQuery<CaseData[]>({
+  const { data: cases, isLoading, refetch, isRefetching } = useQuery<CaseData[]>({
     queryKey: ["/api/cases"],
     queryFn: () => api.cases.list(),
   });
 
   const filteredCases = (cases || []).filter((c) => {
-    const matchesSearch =
-      search.length === 0 ||
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.client.toLowerCase().includes(search.toLowerCase());
-
-    let matchesFilter = true;
-    if (filter === "active") {
-      matchesFilter = c.status.toLowerCase() === "active" || c.status.toLowerCase() === "activo";
-    } else if (filter === "appeal") {
-      matchesFilter =
-        c.status.toLowerCase() === "appeal" ||
-        c.status.toLowerCase() === "apelacion" ||
-        c.status.toLowerCase() === "en apelación";
-    } else if (filter === "closed") {
-      matchesFilter = c.status.toLowerCase() === "closed" || c.status.toLowerCase() === "cerrado";
-    }
-
-    return matchesSearch && matchesFilter;
+    const matchesSearch = !search || c.name.toLowerCase().includes(search.toLowerCase()) || c.client.toLowerCase().includes(search.toLowerCase());
+    if (filter === "active") return matchesSearch && ["active", "activo"].includes(c.status.toLowerCase());
+    if (filter === "appeal") return matchesSearch && ["appeal", "apelacion", "en apelación"].includes(c.status.toLowerCase());
+    if (filter === "closed") return matchesSearch && ["closed", "cerrado"].includes(c.status.toLowerCase());
+    return matchesSearch;
   });
 
-  const renderCaseItem = useCallback(
-    ({ item }: { item: CaseData }) => (
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => router.push(`/cases/${item.id}` as any)}
-        style={{ marginBottom: spacing.md }}
-      >
-        <Card>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: spacing.sm }}>
-            <View style={{ flex: 1, gap: spacing.xs }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, flexWrap: "wrap" }}>
-                <Text
-                  style={{ color: colors.text, fontSize: fontSize.lg, fontWeight: "600", flexShrink: 1 }}
-                  numberOfLines={1}
-                >
-                  {item.name}
-                </Text>
-                <Badge label={item.legalArea} variant={getLegalAreaVariant(item.legalArea) as any} />
-              </View>
-              <Text style={{ color: colors.textSecondary, fontSize: fontSize.sm }}>
-                {item.client}
-              </Text>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: spacing.xs }}>
-                <Badge label={getStatusLabel(item.status)} variant={getStatusVariant(item.status)} />
-                <Text style={{ color: colors.muted, fontSize: fontSize.xs }}>
-                  {formatDate(item.updatedAt || item.createdAt)}
-                </Text>
-              </View>
-            </View>
-            <ChevronRight size={20} color={colors.muted} style={{ marginTop: 4 }} />
+  const renderCaseItem = useCallback(({ item }: { item: CaseData }) => (
+    <TouchableOpacity
+      activeOpacity={0.75}
+      onPress={() => router.push(`/cases/${item.id}` as any)}
+      style={styles.caseItem}
+    >
+      <Card style={styles.caseCard}>
+        <View style={styles.caseRow}>
+          <View style={styles.caseIcon}>
+            <Briefcase size={16} color={colors.accent} strokeWidth={1.8} />
           </View>
-        </Card>
-      </TouchableOpacity>
-    ),
-    [router]
-  );
+          <View style={styles.caseInfo}>
+            <Text style={styles.caseName} numberOfLines={1}>{item.name}</Text>
+            <Text style={styles.caseClient} numberOfLines={1}>{item.client}</Text>
+            <View style={styles.caseMeta}>
+              <Badge label={getStatusLabel(item.status)} variant={getStatusVariant(item.status)} />
+              <Text style={styles.caseDate}>{formatDate(item.updatedAt || item.createdAt)}</Text>
+            </View>
+          </View>
+          <ChevronRight size={16} color={colors.muted} strokeWidth={1.8} />
+        </View>
+      </Card>
+    </TouchableOpacity>
+  ), [router]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm }}>
-        <Text style={{ color: colors.text, fontSize: fontSize.xxl, fontWeight: "700" }}>
-          Casos
+    <View style={styles.root}>
+      {/* ── Header ─────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+        <Text style={styles.title}>Casos</Text>
+        <Text style={styles.subtitle}>
+          {filteredCases.length} {filteredCases.length === 1 ? "caso" : "casos"}
         </Text>
       </View>
 
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          backgroundColor: colors.inputBg,
-          borderRadius: borderRadius.md,
-          marginHorizontal: spacing.lg,
-          marginBottom: spacing.md,
-          paddingHorizontal: spacing.md,
-          gap: spacing.sm,
-        }}
-      >
-        <Search size={18} color={colors.muted} />
+      {/* ── Search ─────────────────────────────── */}
+      <View style={styles.searchWrap}>
+        <Search size={16} color={colors.muted} strokeWidth={1.8} />
         <TextInput
           value={search}
           onChangeText={setSearch}
-          placeholder="Buscar casos..."
+          placeholder="Buscar por nombre o cliente..."
           placeholderTextColor={colors.muted}
-          style={{
-            flex: 1,
-            color: colors.text,
-            fontSize: fontSize.md,
-            paddingVertical: spacing.md,
-          }}
+          style={styles.searchInput}
         />
       </View>
 
-      <View style={{ paddingHorizontal: spacing.lg, marginBottom: spacing.md }}>
-        <FlatList
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          data={filterOptions}
-          keyExtractor={(item) => item.key}
-          contentContainerStyle={{ gap: spacing.sm }}
-          renderItem={({ item }) => {
-            const isActive = filter === item.key;
-            return (
-              <TouchableOpacity
-                onPress={() => setFilter(item.key)}
-                activeOpacity={0.7}
-                style={{
-                  paddingHorizontal: spacing.lg,
-                  paddingVertical: spacing.sm,
-                  borderRadius: borderRadius.full,
-                  backgroundColor: isActive ? colors.accent : colors.card,
-                }}
-              >
-                <Text
-                  style={{
-                    color: isActive ? colors.text : colors.textSecondary,
-                    fontSize: fontSize.sm,
-                    fontWeight: isActive ? "600" : "400",
-                  }}
-                >
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      </View>
+      {/* ── Filters ────────────────────────────── */}
+      <FlatList
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        data={filterOptions}
+        keyExtractor={(item) => item.key}
+        contentContainerStyle={styles.filterList}
+        renderItem={({ item }) => {
+          const active = filter === item.key;
+          return (
+            <TouchableOpacity
+              onPress={() => setFilter(item.key)}
+              activeOpacity={0.7}
+              style={[styles.filterChip, active && styles.filterChipActive]}
+            >
+              <Text style={[styles.filterText, active && styles.filterTextActive]}>{item.label}</Text>
+            </TouchableOpacity>
+          );
+        }}
+      />
 
+      {/* ── List ───────────────────────────────── */}
       {isLoading ? (
-        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <View style={styles.loading}>
           <ActivityIndicator size="large" color={colors.accent} />
         </View>
       ) : filteredCases.length === 0 ? (
         <EmptyState
           icon={Briefcase}
           title="No hay casos"
-          description={search || filter !== "all" ? "No se encontraron casos con los filtros aplicados" : "Crea tu primer caso para comenzar"}
+          description={search || filter !== "all" ? "No se encontraron casos con los filtros aplicados" : "Creá tu primer caso para comenzar"}
         />
       ) : (
         <FlatList
           data={filteredCases}
           keyExtractor={(item) => item.id}
           renderItem={renderCaseItem}
-          contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: 100 }}
+          contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl
-              refreshing={isRefetching}
-              onRefresh={refetch}
-              tintColor={colors.accent}
-              colors={[colors.accent]}
-            />
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.accent} colors={[colors.accent]} />
           }
         />
       )}
@@ -251,3 +174,76 @@ export default function CasesScreen() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.bg },
+  loading: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  title: { color: colors.text, fontSize: fontSize.xxl, fontWeight: "800" },
+  subtitle: { color: colors.muted, fontSize: fontSize.sm, marginTop: 2 },
+
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.inputBg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: borderRadius.md,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.md,
+    gap: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.md,
+    paddingVertical: spacing.md,
+  },
+
+  filterList: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  filterChip: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: 7,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginRight: spacing.sm,
+  },
+  filterChipActive: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent,
+  },
+  filterText: { color: colors.textSecondary, fontSize: fontSize.sm, fontWeight: "500" },
+  filterTextActive: { color: "#fff", fontWeight: "700" },
+
+  list: { paddingHorizontal: spacing.lg, paddingBottom: 100, paddingTop: spacing.sm },
+  caseItem: { marginBottom: spacing.sm },
+  caseCard: { padding: 14 },
+  caseRow: { flexDirection: "row", alignItems: "center", gap: spacing.md },
+  caseIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: borderRadius.sm,
+    backgroundColor: colors.accentSoft,
+    justifyContent: "center",
+    alignItems: "center",
+    flexShrink: 0,
+  },
+  caseInfo: { flex: 1, gap: 3 },
+  caseName: { color: colors.text, fontSize: fontSize.md, fontWeight: "700" },
+  caseClient: { color: colors.muted, fontSize: fontSize.sm },
+  caseMeta: { flexDirection: "row", alignItems: "center", gap: spacing.sm, marginTop: 4 },
+  caseDate: { color: colors.muted, fontSize: fontSize.xs },
+});

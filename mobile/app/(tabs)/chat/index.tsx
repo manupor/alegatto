@@ -149,15 +149,18 @@ export default function ChatScreen() {
 
   return (
     <KeyboardAvoidingView
-      style={[styles.container, { paddingTop: insets.top }]}
+      style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={0}
     >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Consulta Legal IA</Text>
+      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
+        <View>
+          <Text style={styles.headerTitle}>Consulta Legal IA</Text>
+          <Text style={styles.headerSub}>4,482 artículos · 8 códigos CR</Text>
+        </View>
         {messages.length > 0 && (
           <TouchableOpacity onPress={resetConversation} style={styles.resetBtn}>
-            <Text style={styles.resetText}>Nueva</Text>
+            <Text style={styles.resetText}>+ Nueva</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -266,17 +269,23 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     justifyContent: "space-between",
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
+    paddingBottom: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.border,
   },
   headerTitle: {
     color: colors.text,
-    fontSize: fontSize.xl,
-    fontWeight: "700",
+    fontSize: fontSize.xxl,
+    fontWeight: "800",
+  },
+  headerSub: {
+    color: colors.muted,
+    fontSize: fontSize.xs,
+    marginTop: 2,
+    letterSpacing: 0.2,
   },
   resetBtn: {
     backgroundColor: colors.card,

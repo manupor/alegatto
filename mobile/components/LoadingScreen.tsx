@@ -1,4 +1,5 @@
-import { View, Text, ActivityIndicator } from "react-native";
+import { View, Text, ActivityIndicator, StyleSheet } from "react-native";
+import { colors, fontSize } from "../lib/theme";
 
 interface LoadingScreenProps {
   message?: string;
@@ -6,37 +7,59 @@ interface LoadingScreenProps {
 
 export default function LoadingScreen({ message }: LoadingScreenProps) {
   return (
-    <View
-      style={{
-        flex: 1,
-        backgroundColor: "#0f172a",
-        justifyContent: "center",
-        alignItems: "center",
-        gap: 20,
-      }}
-    >
-      <Text
-        style={{
-          color: "#10B981",
-          fontSize: 28,
-          fontWeight: "700",
-          letterSpacing: 1,
-        }}
-      >
-        LexAI CR
-      </Text>
-      <ActivityIndicator size="large" color="#10B981" />
+    <View style={styles.container}>
+      <View style={styles.logoWrap}>
+        <Text style={styles.logoEmoji}>⚖️</Text>
+      </View>
+      <Text style={styles.brand}>LexAI CR</Text>
+      <Text style={styles.tagline}>Asistente Legal con IA</Text>
+      <ActivityIndicator size="small" color={colors.accent} style={styles.spinner} />
       {message ? (
-        <Text
-          style={{
-            color: "#64748b",
-            fontSize: 14,
-            marginTop: 4,
-          }}
-        >
-          {message}
-        </Text>
+        <Text style={styles.message}>{message}</Text>
       ) : null}
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.bg,
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  logoWrap: {
+    width: 80,
+    height: 80,
+    borderRadius: 24,
+    backgroundColor: colors.accentSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(16,185,129,0.25)',
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  logoEmoji: {
+    fontSize: 38,
+  },
+  brand: {
+    color: colors.text,
+    fontSize: fontSize.xxl,
+    fontWeight: "800",
+    letterSpacing: 0.5,
+  },
+  tagline: {
+    color: colors.muted,
+    fontSize: fontSize.sm,
+    letterSpacing: 0.3,
+  },
+  spinner: {
+    marginTop: 24,
+  },
+  message: {
+    color: colors.muted,
+    fontSize: fontSize.sm,
+    marginTop: 4,
+  },
+});
