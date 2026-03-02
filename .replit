@@ -45,6 +45,8 @@ integrations = ["javascript_database:1.0.0", "javascript_log_in_with_replit:2.0.
 [userenv]
 
 [userenv.shared]
+SUPER_ADMIN_EMAIL = "manuelportuguezmora@gmail.com"
+VITE_SUPER_ADMIN_EMAIL = "manuelportuguezmora@gmail.com"
 
 [userenv.production]
 APP_URL = "https://alegatto.com"

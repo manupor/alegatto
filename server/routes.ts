@@ -333,17 +333,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Register firm (create org) ──
   app.post("/api/org/register", async (req, res) => {
     try {
-      const { name, slug, plan = "free" } = req.body;
+      const { name, slug } = req.body;
       if (!name || !slug) return res.status(400).json({ message: "name and slug required" });
 
       const existing = await storage.getOrgBySlug(slug);
       if (existing) return res.status(409).json({ message: "Ese identificador ya está en uso" });
 
       const userId = getUserId(req);
+
+      let plan = "free";
+      let betaApplied = false;
+      const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+      if (user) {
+        const betaInvite = await storage.getBetaInviteByEmail(user.email);
+        if (betaInvite && !betaInvite.used) {
+          plan = "pro";
+          betaApplied = true;
+          await storage.markBetaInviteUsed(betaInvite.id);
+        }
+      }
+
       const org = await storage.createOrg({ name, slug, plan });
       await storage.addOrgMember({ orgId: org.id, userId, role: "admin" });
 
-      res.status(201).json({ org, role: "admin" });
+      res.status(201).json({ org, role: "admin", betaApplied });
     } catch (err: any) {
       res.status(400).json({ message: err.message });
     }
@@ -962,6 +975,48 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
   app.put("/api/deadlines/:id", async (req, res) => {
     const updated = await storage.updateDeadline(req.params.id, req.body);
     res.json(updated);
+  });
+
+  // ── Super Admin: Beta Invites ─────────────────────────────
+  const isSuperAdmin = (req: any) => {
+    const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
+    return superAdminEmail && req.user?.email === superAdminEmail;
+  };
+
+  app.get("/api/admin/beta-invites", async (req, res) => {
+    if (!isSuperAdmin(req)) return res.status(403).json({ message: "Acceso denegado" });
+    const invites = await storage.getBetaInvites();
+    res.json(invites);
+  });
+
+  app.post("/api/admin/beta-invites", async (req, res) => {
+    if (!isSuperAdmin(req)) return res.status(403).json({ message: "Acceso denegado" });
+    const { email, note } = req.body;
+    if (!email) return res.status(400).json({ message: "email requerido" });
+
+    const existing = await storage.getBetaInviteByEmail(email);
+    if (existing) return res.status(409).json({ message: "Ya existe una invitación para ese correo" });
+
+    const code = "BETA-" + randomUUID().split("-")[0].toUpperCase();
+    const invite = await storage.createBetaInvite({ email, code, note });
+
+    const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+    const betaLink = `${appUrl}/auth?betaCode=${code}&email=${encodeURIComponent(email)}`;
+
+    try {
+      const { sendBetaInviteEmail } = await import("./email");
+      await sendBetaInviteEmail({ to: email, code, betaLink });
+    } catch (e) {
+      console.warn("[beta-invite] Email send failed:", (e as Error).message);
+    }
+
+    res.status(201).json({ invite, betaLink });
+  });
+
+  app.delete("/api/admin/beta-invites/:id", async (req, res) => {
+    if (!isSuperAdmin(req)) return res.status(403).json({ message: "Acceso denegado" });
+    await storage.deleteBetaInvite(req.params.id);
+    res.status(204).send();
   });
 
   return httpServer;

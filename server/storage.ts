@@ -1,11 +1,12 @@
 import {
   users, conversations, messages, documentEditors, documentVersions,
   firmaRequests, appeals, cases, caseEvents, caseNotes, deadlines,
-  organizations, orgMembers, orgInvites,
+  organizations, orgMembers, orgInvites, betaInvites,
   type InsertUser, type User, type Conversation, type DocumentEditor,
   type DocumentVersion, type FirmaRequest, type Appeal, type InsertAppeal,
   type Case, type InsertCase, type CaseEvent, type CaseNote, type Deadline,
   type Organization, type InsertOrganization, type OrgMember, type OrgInvite,
+  type BetaInvite,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, asc, and, or, isNull } from "drizzle-orm";
@@ -79,6 +80,14 @@ export interface IStorage {
   getOrgInviteByToken(token: string): Promise<OrgInvite | undefined>;
   createOrgInvite(invite: typeof orgInvites.$inferInsert): Promise<OrgInvite>;
   deleteOrgInvite(id: string): Promise<void>;
+
+  // Beta Invites (super-admin)
+  getBetaInvites(): Promise<BetaInvite[]>;
+  getBetaInviteByEmail(email: string): Promise<BetaInvite | undefined>;
+  getBetaInviteByCode(code: string): Promise<BetaInvite | undefined>;
+  createBetaInvite(data: { email: string; code: string; note?: string }): Promise<BetaInvite>;
+  markBetaInviteUsed(id: string): Promise<void>;
+  deleteBetaInvite(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -350,6 +359,33 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrgInvite(id: string): Promise<void> {
     await db.delete(orgInvites).where(eq(orgInvites.id, id));
+  }
+
+  async getBetaInvites(): Promise<BetaInvite[]> {
+    return db.select().from(betaInvites).orderBy(desc(betaInvites.createdAt));
+  }
+
+  async getBetaInviteByEmail(email: string): Promise<BetaInvite | undefined> {
+    const [inv] = await db.select().from(betaInvites).where(eq(betaInvites.email, email)).limit(1);
+    return inv;
+  }
+
+  async getBetaInviteByCode(code: string): Promise<BetaInvite | undefined> {
+    const [inv] = await db.select().from(betaInvites).where(eq(betaInvites.code, code)).limit(1);
+    return inv;
+  }
+
+  async createBetaInvite(data: { email: string; code: string; note?: string }): Promise<BetaInvite> {
+    const [inv] = await db.insert(betaInvites).values(data).returning();
+    return inv;
+  }
+
+  async markBetaInviteUsed(id: string): Promise<void> {
+    await db.update(betaInvites).set({ used: true, usedAt: new Date() }).where(eq(betaInvites.id, id));
+  }
+
+  async deleteBetaInvite(id: string): Promise<void> {
+    await db.delete(betaInvites).where(eq(betaInvites.id, id));
   }
 }
 

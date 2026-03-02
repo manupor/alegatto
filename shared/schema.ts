@@ -216,6 +216,19 @@ export const caseRelations = relations(cases, ({ one, many }) => ({
   notes: many(caseNotes),
 }));
 
+// ── Beta Invites (super-admin issued, grants pro plan on org creation) ──
+export const betaInvites = pgTable("beta_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  code: text("code").notNull().unique(),
+  note: text("note"),
+  used: boolean("used").notNull().default(false),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type BetaInvite = typeof betaInvites.$inferSelect;
+
 // ── Insert Schemas ────────────────────────────────────────
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertConversationSchema = createInsertSchema(conversations).omit({ id: true, createdAt: true, updatedAt: true });
