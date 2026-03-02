@@ -112,7 +112,7 @@ export default function BillingPage() {
   }, []);
 
   const handleUpgrade = (planKey: string) => {
-    setLocation(`/dashboard/checkout/tilopay?plan=${planKey}`);
+    window.location.href = `/checkout/tilopay?plan=${planKey}`;
   };
 
   const planLabel = (plan: string) => {

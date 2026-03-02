@@ -1030,6 +1030,208 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
     res.status(204).send();
   });
 
+  // ── Tilopay Checkout — full server-rendered HTML page (SDK needs real DOM) ──
+
+  app.get("/checkout/tilopay", requireAuth, async (req, res) => {
+    try {
+      const plan = req.query.plan as string;
+      if (!["pro", "corporate"].includes(plan)) {
+        return res.status(400).send("Plan inválido");
+      }
+
+      const userId = getUserId(req);
+      const membership = await storage.getOrgMembership(userId);
+      if (!membership) return res.status(404).send("Organización no encontrada");
+
+      const [userRecord] = await db
+        .select({ email: users.email, name: users.name })
+        .from(users)
+        .where(eq(users.id, userId));
+
+      const amount = plan === "pro" ? 20.00 : 50.00;
+      const shortOrg = membership.orgId.replace(/-/g, "").substring(0, 8).toUpperCase();
+      const orderNumber = `A${plan === "pro" ? "P" : "C"}${shortOrg}${Date.now().toString().slice(-5)}`;
+      const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+      const nameParts = (userRecord?.name || "Cliente Alegatto").split(" ");
+      const firstName = nameParts[0] ?? "Cliente";
+      const lastName = nameParts.slice(1).join(" ") || "Alegatto";
+      const email = userRecord?.email ?? "";
+      const callbackUrl = `${appUrl}/dashboard/billing?tilo_order=${orderNumber}&tilo_plan=${plan}&tilo_org=${membership.orgId}`;
+      const apiKey = process.env.TILOPAY_API_KEY ?? "";
+      const planName = plan === "pro" ? "Plan Pro — $20.00 USD/mes" : "Plan Corporativo — $50.00 USD/mes";
+      const dashboardUrl = `${appUrl}/dashboard/billing`;
+
+      const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Pago seguro · Alegatto</title>
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+  <script src="https://app.tilopay.com/sdk/v1/sdk.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+    .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; }
+    .logo { font-size: 20px; font-weight: 700; color: #a78bfa; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
+    .plan-badge { background: #7c3aed22; border: 1px solid #7c3aed44; border-radius: 12px; padding: 14px 16px; margin-bottom: 24px; }
+    .plan-badge h2 { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 2px; }
+    .plan-badge p { font-size: 13px; color: #94a3b8; }
+    label { display: block; font-size: 12px; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    select { width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 10px 12px; color: #e2e8f0; font-size: 14px; margin-bottom: 16px; outline: none; cursor: pointer; }
+    select:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px #7c3aed33; }
+    #tilopay-form-fields { margin-bottom: 16px; }
+    #tilopay-form-fields input, #tilopay-form-fields select { width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 10px 12px; color: #e2e8f0; font-size: 14px; margin-bottom: 10px; outline: none; }
+    #tilopay-form-fields input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px #7c3aed33; }
+    #btn-pay { width: 100%; background: #7c3aed; color: white; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
+    #btn-pay:hover { background: #6d28d9; }
+    #btn-pay:disabled { background: #4c3880; cursor: not-allowed; opacity: 0.6; }
+    .back-link { display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 13px; text-decoration: none; margin-bottom: 20px; cursor: pointer; background: none; border: none; }
+    .back-link:hover { color: #94a3b8; }
+    .security-note { margin-top: 20px; font-size: 12px; color: #64748b; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .error-box { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 10px; padding: 16px; color: #fca5a5; font-size: 14px; text-align: center; margin-top: 16px; }
+    .spinner { display: none; width: 18px; height: 18px; border: 2px solid #ffffff44; border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <button class="back-link" onclick="window.location.href='${dashboardUrl}'">← Volver a planes</button>
+
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#7c3aed"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Alegatto
+    </div>
+
+    <div class="plan-badge">
+      <h2>${planName}</h2>
+      <p>Pago seguro · PCI-DSS · Tilopay</p>
+    </div>
+
+    <div>
+      <label>Método de pago</label>
+      <select id="method"><option value="">Cargando métodos…</option></select>
+    </div>
+
+    <div>
+      <label>Tarjeta guardada (opcional)</label>
+      <select id="cards"><option value="">Nueva tarjeta</option></select>
+    </div>
+
+    <div id="tilopay-form-fields"></div>
+
+    <button id="btn-pay" onclick="doPay()" disabled>
+      <span class="spinner" id="spinner"></span>
+      Pagar ${planName.split("—")[1]?.trim() ?? ""}
+    </button>
+
+    <div class="security-note">
+      🔒 Pago seguro · Acepta tarjetas Visa / Mastercard · SINPE Móvil
+    </div>
+  </div>
+
+  <script>
+    function chargeMethods(methods) {
+      var sel = document.getElementById('method');
+      sel.innerHTML = '';
+      if (!methods || !methods.length) {
+        sel.innerHTML = '<option value="">Sin métodos disponibles</option>';
+        return;
+      }
+      methods.forEach(function(m) {
+        var opt = document.createElement('option');
+        opt.value = m.id !== undefined ? m.id : m;
+        opt.textContent = m.name !== undefined ? m.name : m;
+        sel.appendChild(opt);
+      });
+      document.getElementById('btn-pay').disabled = false;
+    }
+
+    function chargeCards(cards) {
+      var sel = document.getElementById('cards');
+      sel.innerHTML = '<option value="">Nueva tarjeta</option>';
+      if (!cards || !cards.length) return;
+      cards.forEach(function(c) {
+        var opt = document.createElement('option');
+        opt.value = c.id !== undefined ? c.id : c;
+        opt.textContent = c.name !== undefined ? c.name : c;
+        sel.appendChild(opt);
+      });
+    }
+
+    function doPay() {
+      var btn = document.getElementById('btn-pay');
+      var sp = document.getElementById('spinner');
+      btn.disabled = true;
+      sp.style.display = 'inline-block';
+      try {
+        Tilopay.startPayment();
+      } catch(e) {
+        btn.disabled = false;
+        sp.style.display = 'none';
+        alert('Error al procesar el pago: ' + e.message);
+      }
+    }
+
+    $(document).ready(function() {
+      try {
+        var init = Tilopay.Init({
+          token: "${apiKey}",
+          currency: "USD",
+          language: "es",
+          amount: ${amount},
+          orderNumber: "${orderNumber}",
+          capture: 1,
+          subscription: 1,
+          redirect: "${callbackUrl}",
+          billToEmail: "${email}",
+          billToFirstName: "${firstName}",
+          billToLastName: "${lastName}",
+          billToCountry: "CR",
+          billToCity: "San Jose",
+          billToState: "SJ",
+          billToAddress: "Costa Rica",
+          billToAddress2: "",
+          billToZipPostCode: "10101",
+          billToTelephone: "00000000",
+          shipToFirstName: "${firstName}",
+          shipToLastName: "${lastName}",
+          shipToCountry: "CR",
+          shipToCity: "San Jose",
+          shipToState: "SJ",
+          shipToAddress: "Costa Rica",
+          shipToAddress2: "",
+          shipToZipPostCode: "10101",
+          shipToTelephone: "00000000",
+          typeDni: 1,
+          dni: "100000000"
+        });
+        if (init && init.methods) chargeMethods(init.methods);
+        if (init && init.cards) chargeCards(init.cards);
+        if (init && init.methods && init.methods.length > 0) {
+          document.getElementById('btn-pay').disabled = false;
+        }
+      } catch(e) {
+        document.getElementById('btn-pay').disabled = false;
+        document.body.insertAdjacentHTML('beforeend',
+          '<div class="error-box" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:400px;z-index:999">' +
+          'Error al cargar el formulario de pago: ' + e.message +
+          '<br><small>Contacte a soporte@alegatto.com</small></div>'
+        );
+      }
+    });
+  </script>
+</body>
+</html>`;
+
+      res.setHeader("Content-Type", "text/html");
+      res.send(html);
+    } catch (e: any) {
+      console.error("[checkout/tilopay]", e.message);
+      res.status(500).send("Error interno del servidor");
+    }
+  });
+
   // ── Billing (Tilopay) ─────────────────────────────────────────────────────
 
   app.get("/api/billing/tilopay/config", requireAuth, async (req, res) => {
