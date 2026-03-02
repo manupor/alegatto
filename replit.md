@@ -44,6 +44,8 @@ Full-stack legal AI SaaS platform for Costa Rica built with React + Express + Po
 | POST | `/api/cases/:id/notes` | Add internal note |
 | GET/POST | `/api/deadlines` | Deadline CRUD |
 | PUT | `/api/deadlines/:id` | Update deadline status |
+| GET | `/api/calendar/status` | Returns `{ connected: bool }` — whether user has Google Calendar tokens |
+| POST | `/api/calendar/create-event` | Creates event in user's Google Calendar via API (requires OAuth tokens); body: `{ summary, description, date }` |
 
 ## Database Schema
 Key tables: `users`, `conversations`, `messages`, `document_editors`, `document_versions`, `firma_requests`, `documents` (legal corpus with pgvector), `appeals`, `cases`, `case_events`, `case_notes`, `deadlines`, `organizations`, `org_members`

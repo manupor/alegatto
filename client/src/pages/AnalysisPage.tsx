@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { queryClient } from "@/lib/queryClient";
+import { useQuery } from "@tanstack/react-query";
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, TableRow, TableCell, Table, WidthType
@@ -263,6 +264,8 @@ export default function AnalysisPage() {
   // ── Appeal reminder modal ──────────────────────────────
   const [showReminder, setShowReminder] = useState(false);
   const [reminderSaving, setReminderSaving] = useState(false);
+  const [syncingCalendar, setSyncingCalendar] = useState(false);
+  const [calendarEventLink, setCalendarEventLink] = useState<string | null>(null);
   const defaultDueDate = () => {
     const d = new Date();
     d.setDate(d.getDate() + 30);
@@ -311,6 +314,7 @@ export default function AnalysisPage() {
           `Recurso de apelación – ${data.filename}. Riesgo: ${risk === "high" ? "Alto" : "Medio"}. ${recs}`
         );
         setReminderDate(defaultDueDate());
+        setCalendarEventLink(null);
         setShowReminder(true);
       }
     } catch (err: any) {
@@ -327,6 +331,12 @@ export default function AnalysisPage() {
     multiple: false,
     disabled: loading,
   });
+
+  // ── Calendar status ────────────────────────────────────
+  const { data: calStatus } = useQuery<{ connected: boolean }>({
+    queryKey: ["/api/calendar/status"],
+  });
+  const calendarConnected = calStatus?.connected ?? false;
 
   // ── Reminder functions ─────────────────────────────────
   const saveReminderInApp = async () => {
@@ -368,18 +378,34 @@ export default function AnalysisPage() {
     }
   };
 
-  const openGoogleCalendar = () => {
-    const title = encodeURIComponent(`Apelación – ${filename}`);
-    const details = encodeURIComponent(reminderDesc);
-    // Google Calendar all-day event date format: YYYYMMDD
-    const dateStr = reminderDate.replace(/-/g, "");
-    const nextDay = (() => {
-      const d = new Date(reminderDate + "T12:00:00");
-      d.setDate(d.getDate() + 1);
-      return d.toISOString().split("T")[0].replace(/-/g, "");
-    })();
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${nextDay}&details=${details}`;
-    window.open(url, "_blank", "noopener");
+  const syncGoogleCalendar = async () => {
+    if (!reminderDate || !reminderDesc.trim()) {
+      toast.error("Completá la fecha y descripción");
+      return;
+    }
+    setSyncingCalendar(true);
+    try {
+      const res = await fetch("/api/calendar/create-event", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          summary: `Apelación – ${filename}`,
+          description: reminderDesc,
+          date: reminderDate,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Error al sincronizar");
+      }
+      const data = await res.json();
+      setCalendarEventLink(data.eventLink);
+      toast.success("Evento creado en Google Calendar con recordatorios");
+    } catch (err: any) {
+      toast.error(err.message || "Error al sincronizar con Google Calendar");
+    } finally {
+      setSyncingCalendar(false);
+    }
   };
 
   const downloadICS = () => {
@@ -990,27 +1016,50 @@ export default function AnalysisPage() {
                     Guardar en LexAI + Notificación
                   </button>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* Google Calendar */}
-                    <button
-                      onClick={openGoogleCalendar}
-                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-foreground hover:bg-secondary/80 transition-colors"
-                      data-testid="button-google-calendar"
+                  {/* Google Calendar — smart section */}
+                  {calendarConnected ? (
+                    calendarEventLink ? (
+                      <a
+                        href={calendarEventLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 text-sm text-emerald-400 hover:bg-emerald-500/20 transition-colors"
+                        data-testid="link-calendar-event"
+                      >
+                        <CheckCircle className="w-4 h-4" />
+                        Evento creado — Ver en Google Calendar
+                      </a>
+                    ) : (
+                      <button
+                        onClick={syncGoogleCalendar}
+                        disabled={syncingCalendar}
+                        className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-blue-500/40 bg-blue-500/10 text-sm text-blue-400 hover:bg-blue-500/20 transition-colors disabled:opacity-50"
+                        data-testid="button-sync-google-calendar"
+                      >
+                        {syncingCalendar ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}
+                        Sincronizar con Google Calendar
+                      </button>
+                    )
+                  ) : (
+                    <a
+                      href="/api/auth/google"
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-muted-foreground hover:bg-secondary/80 transition-colors"
+                      data-testid="link-connect-google"
                     >
-                      <CalendarPlus className="w-4 h-4 text-blue-400" />
-                      Google Calendar
-                    </button>
+                      <CalendarPlus className="w-4 h-4" />
+                      Conectar Google Calendar
+                    </a>
+                  )}
 
-                    {/* Download ICS */}
-                    <button
-                      onClick={downloadICS}
-                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-foreground hover:bg-secondary/80 transition-colors"
-                      data-testid="button-download-ics"
-                    >
-                      <Calendar className="w-4 h-4 text-emerald-400" />
-                      Descargar .ics
-                    </button>
-                  </div>
+                  {/* Download ICS for phone / Apple Calendar */}
+                  <button
+                    onClick={downloadICS}
+                    className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-foreground hover:bg-secondary/80 transition-colors"
+                    data-testid="button-download-ics"
+                  >
+                    <Calendar className="w-4 h-4 text-emerald-400" />
+                    Agregar al calendario del teléfono (.ics)
+                  </button>
 
                   <button
                     onClick={() => setShowReminder(false)}

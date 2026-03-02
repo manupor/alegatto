@@ -94,8 +94,11 @@ export async function setupAuth(app: Express) {
           clientID: process.env.GOOGLE_CLIENT_ID,
           clientSecret: process.env.GOOGLE_CLIENT_SECRET,
           callbackURL: `${appUrl}/api/auth/google/callback`,
-        },
-        async (_accessToken, _refreshToken, profile, done) => {
+          scope: ["profile", "email", "https://www.googleapis.com/auth/calendar.events"],
+          accessType: "offline",
+          prompt: "consent",
+        } as any,
+        async (accessToken, refreshToken, profile, done) => {
           try {
             const email = profile.emails?.[0]?.value;
             if (!email) {
@@ -125,6 +128,8 @@ export async function setupAuth(app: Express) {
                     googleId: profile.id,
                     avatarUrl: profile.photos?.[0]?.value ?? existing.avatarUrl,
                     name: existing.name ?? profile.displayName,
+                    googleAccessToken: accessToken,
+                    googleRefreshToken: refreshToken ?? existing.googleRefreshToken,
                   })
                   .where(eq(users.id, existing.id))
                   .returning();
@@ -141,9 +146,21 @@ export async function setupAuth(app: Express) {
                     googleId: profile.id,
                     avatarUrl: profile.photos?.[0]?.value ?? null,
                     plan: "FREE",
+                    googleAccessToken: accessToken,
+                    googleRefreshToken: refreshToken ?? null,
                   })
                   .returning();
               }
+            } else {
+              // Update tokens for existing Google user
+              [user] = await db
+                .update(users)
+                .set({
+                  googleAccessToken: accessToken,
+                  googleRefreshToken: refreshToken ?? user.googleRefreshToken,
+                })
+                .where(eq(users.id, user.id))
+                .returning();
             }
 
             return done(null, {

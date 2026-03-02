@@ -15,6 +15,39 @@ import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./lega
 import { passport, bcrypt } from "./auth";
 import { users } from "@shared/schema";
 
+// ── Google token refresh helper ───────────────────────────
+async function refreshGoogleTokenIfNeeded(user: { id: string; googleAccessToken: string | null; googleRefreshToken: string | null }): Promise<string | null> {
+  if (!user.googleAccessToken) return null;
+
+  // Try a lightweight token info check
+  const infoRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?access_token=${user.googleAccessToken}`);
+  if (infoRes.ok) return user.googleAccessToken;
+
+  // Token invalid/expired — try refresh
+  if (!user.googleRefreshToken) return null;
+
+  const refreshRes = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: process.env.GOOGLE_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_CLIENT_SECRET!,
+      refresh_token: user.googleRefreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+
+  if (!refreshRes.ok) return null;
+
+  const refreshData = await refreshRes.json();
+  const newToken: string = refreshData.access_token;
+
+  // Persist refreshed token
+  await db.update(users).set({ googleAccessToken: newToken }).where(eq(users.id, user.id));
+
+  return newToken;
+}
+
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
@@ -196,7 +229,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Google OAuth ─────────────────────────────────
   app.get(
     "/api/auth/google",
-    passport.authenticate("google", { scope: ["profile", "email"] }),
+    passport.authenticate("google", {
+      scope: ["profile", "email", "https://www.googleapis.com/auth/calendar.events"],
+      accessType: "offline",
+      prompt: "consent",
+    } as any),
   );
 
   app.get(
@@ -206,6 +243,74 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.redirect("/dashboard");
     },
   );
+
+  // ── Google Calendar status ────────────────────────
+  app.get("/api/calendar/status", async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ connected: false });
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    res.json({ connected: !!(user?.googleAccessToken) });
+  });
+
+  // ── Google Calendar create event ─────────────────
+  app.post("/api/calendar/create-event", async (req, res) => {
+    const userId = getUserId(req);
+    if (!userId) return res.status(401).json({ message: "No autenticado" });
+
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user?.googleAccessToken) {
+      return res.status(403).json({ message: "Google Calendar no conectado. Iniciá sesión con Google para habilitar esta función." });
+    }
+
+    const { summary, description, date } = req.body;
+    if (!summary || !date) {
+      return res.status(400).json({ message: "Faltan datos: summary y date son requeridos" });
+    }
+
+    const accessToken = await refreshGoogleTokenIfNeeded(user);
+    if (!accessToken) {
+      return res.status(403).json({ message: "Token de Google expirado. Volvé a iniciar sesión con Google." });
+    }
+
+    // Build Google Calendar event (all-day)
+    const startDate = date; // YYYY-MM-DD
+    const endDateObj = new Date(startDate + "T12:00:00");
+    endDateObj.setDate(endDateObj.getDate() + 1);
+    const endDate = endDateObj.toISOString().split("T")[0];
+
+    const event = {
+      summary,
+      description,
+      start: { date: startDate },
+      end: { date: endDate },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "email", minutes: 24 * 60 },
+          { method: "popup", minutes: 24 * 60 },
+          { method: "popup", minutes: 60 },
+        ],
+      },
+    };
+
+    const gcalRes = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(event),
+    });
+
+    if (!gcalRes.ok) {
+      const errData = await gcalRes.json().catch(() => ({}));
+      console.error("Google Calendar API error:", errData);
+      return res.status(500).json({ message: "Error al crear evento en Google Calendar", detail: errData });
+    }
+
+    const created = await gcalRes.json();
+    res.json({ success: true, eventLink: created.htmlLink, eventId: created.id });
+  });
 
   // ──────────────────────────────────────────
   // ORG CONTEXT
