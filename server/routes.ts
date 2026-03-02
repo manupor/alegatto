@@ -1072,25 +1072,34 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-    .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 16px; padding: 32px; width: 100%; max-width: 480px; }
-    .logo { font-size: 20px; font-weight: 700; color: #a78bfa; margin-bottom: 24px; display: flex; align-items: center; gap: 8px; }
-    .plan-badge { background: #7c3aed22; border: 1px solid #7c3aed44; border-radius: 12px; padding: 14px 16px; margin-bottom: 24px; }
+    .card { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 16px; padding: 28px; width: 100%; max-width: 480px; }
+    .logo { font-size: 20px; font-weight: 700; color: #a78bfa; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
+    .plan-badge { background: #7c3aed22; border: 1px solid #7c3aed44; border-radius: 12px; padding: 14px 16px; margin-bottom: 20px; }
     .plan-badge h2 { font-size: 15px; font-weight: 600; color: #e2e8f0; margin-bottom: 2px; }
     .plan-badge p { font-size: 13px; color: #94a3b8; }
-    label { display: block; font-size: 12px; font-weight: 500; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-    select { width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 10px 12px; color: #e2e8f0; font-size: 14px; margin-bottom: 16px; outline: none; cursor: pointer; }
-    select:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px #7c3aed33; }
-    #tilopay-form-fields { margin-bottom: 16px; }
-    #tilopay-form-fields input, #tilopay-form-fields select { width: 100%; background: #0f1117; border: 1px solid #2d3748; border-radius: 8px; padding: 10px 12px; color: #e2e8f0; font-size: 14px; margin-bottom: 10px; outline: none; }
-    #tilopay-form-fields input:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px #7c3aed33; }
-    #btn-pay { width: 100%; background: #7c3aed; color: white; border: none; border-radius: 10px; padding: 14px; font-size: 15px; font-weight: 600; cursor: pointer; transition: background 0.2s; margin-top: 8px; }
-    #btn-pay:hover { background: #6d28d9; }
-    #btn-pay:disabled { background: #4c3880; cursor: not-allowed; opacity: 0.6; }
-    .back-link { display: inline-flex; align-items: center; gap: 6px; color: #64748b; font-size: 13px; text-decoration: none; margin-bottom: 20px; cursor: pointer; background: none; border: none; }
+    .field { margin-bottom: 14px; }
+    label { display: block; font-size: 11px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 5px; }
+    input, select {
+      width: 100%; background: #0d1018; border: 1px solid #2d3748; border-radius: 8px;
+      padding: 10px 12px; color: #e2e8f0; font-size: 14px; outline: none;
+      -webkit-appearance: none; appearance: none;
+    }
+    input::placeholder { color: #4a5568; }
+    input:focus, select:focus { border-color: #7c3aed; box-shadow: 0 0 0 2px #7c3aed33; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+    #btn-pay {
+      width: 100%; background: #7c3aed; color: white; border: none; border-radius: 10px;
+      padding: 13px; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+    }
+    #btn-pay:hover:not(:disabled) { background: #6d28d9; }
+    #btn-pay:disabled { opacity: 0.55; cursor: not-allowed; }
+    .back-link { display: inline-flex; align-items: center; gap: 5px; color: #64748b; font-size: 13px; cursor: pointer; background: none; border: none; margin-bottom: 18px; padding: 0; }
     .back-link:hover { color: #94a3b8; }
-    .security-note { margin-top: 20px; font-size: 12px; color: #64748b; text-align: center; display: flex; align-items: center; justify-content: center; gap: 6px; }
-    .error-box { background: #450a0a; border: 1px solid #7f1d1d; border-radius: 10px; padding: 16px; color: #fca5a5; font-size: 14px; text-align: center; margin-top: 16px; }
-    .spinner { display: none; width: 18px; height: 18px; border: 2px solid #ffffff44; border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+    .security-note { margin-top: 18px; font-size: 11px; color: #4a5568; text-align: center; }
+    .loading-msg { text-align: center; color: #64748b; font-size: 14px; padding: 12px 0; }
+    .error-box { background: #450a0a22; border: 1px solid #7f1d1d; border-radius: 10px; padding: 14px; color: #fca5a5; font-size: 13px; text-align: center; margin-top: 14px; line-height: 1.5; }
+    .spinner-ring { display: inline-block; width: 16px; height: 16px; border: 2px solid #ffffff55; border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -1099,7 +1108,7 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
     <button class="back-link" onclick="window.location.href='${dashboardUrl}'">← Volver a planes</button>
 
     <div class="logo">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#7c3aed"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" fill="#7c3aed"/><path d="M8 12l3 3 5-5" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       Alegatto
     </div>
 
@@ -1108,26 +1117,50 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       <p>Pago seguro · PCI-DSS · Tilopay</p>
     </div>
 
-    <div>
-      <label>Método de pago</label>
-      <select id="method"><option value="">Cargando métodos…</option></select>
-    </div>
+    <div id="loading-state" class="loading-msg">Cargando formulario de pago…</div>
+    <div id="error-state" class="error-box" style="display:none"></div>
 
-    <div>
-      <label>Tarjeta guardada (opcional)</label>
-      <select id="cards"><option value="">Nueva tarjeta</option></select>
-    </div>
+    <!-- payFormTilopay: required class for Tilopay SDK event delegation -->
+    <form class="payFormTilopay" id="pay-form" style="display:none" onsubmit="return false;">
 
-    <div id="tilopay-form-fields"></div>
+      <div class="field">
+        <label>Método de pago</label>
+        <!-- #method: SDK attaches change→sinpeMovil listener here -->
+        <select id="method"><option value="">Seleccione método…</option></select>
+      </div>
 
-    <button id="btn-pay" onclick="doPay()" disabled>
-      <span class="spinner" id="spinner"></span>
-      Pagar ${planName.split("—")[1]?.trim() ?? ""}
-    </button>
+      <div class="field">
+        <label>Tarjeta guardada (opcional)</label>
+        <select id="cards"><option value="">Nueva tarjeta</option></select>
+      </div>
 
-    <div class="security-note">
-      🔒 Pago seguro · Acepta tarjetas Visa / Mastercard · SINPE Móvil
-    </div>
+      <div class="field">
+        <label>Número de tarjeta</label>
+        <!-- #ccnumber: SDK uses payform.cardNumberInput() on this element -->
+        <input id="ccnumber" type="tel" placeholder="4242 4242 4242 4242" autocomplete="cc-number" inputmode="numeric"/>
+      </div>
+
+      <div class="row">
+        <div>
+          <label>Vencimiento</label>
+          <!-- #expdate: SDK uses payform.expiryInput() on this element -->
+          <input id="expdate" type="tel" placeholder="MM/AAAA" autocomplete="cc-exp" inputmode="numeric"/>
+        </div>
+        <div>
+          <label>CVV</label>
+          <!-- #cvv: SDK uses payform.cvcInput() on this element -->
+          <input id="cvv" type="tel" placeholder="123" autocomplete="cc-csc" inputmode="numeric"/>
+        </div>
+      </div>
+
+      <button id="btn-pay" type="button" onclick="doPay()" disabled>
+        <span id="btn-spinner" style="display:none" class="spinner-ring"></span>
+        Pagar ${planName.split("—")[1]?.trim() ?? ""}
+      </button>
+
+    </form>
+
+    <div class="security-note">🔒 Visa · Mastercard · SINPE Móvil · Cifrado PCI-DSS</div>
   </div>
 
   <script>
@@ -1135,16 +1168,15 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       var sel = document.getElementById('method');
       sel.innerHTML = '';
       if (!methods || !methods.length) {
-        sel.innerHTML = '<option value="">Sin métodos disponibles</option>';
+        sel.innerHTML = '<option value="">Sin métodos</option>';
         return;
       }
       methods.forEach(function(m) {
         var opt = document.createElement('option');
-        opt.value = m.id !== undefined ? m.id : m;
-        opt.textContent = m.name !== undefined ? m.name : m;
+        opt.value = m.id !== undefined ? m.id : String(m);
+        opt.textContent = m.name !== undefined ? m.name : String(m);
         sel.appendChild(opt);
       });
-      document.getElementById('btn-pay').disabled = false;
     }
 
     function chargeCards(cards) {
@@ -1153,15 +1185,23 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       if (!cards || !cards.length) return;
       cards.forEach(function(c) {
         var opt = document.createElement('option');
-        opt.value = c.id !== undefined ? c.id : c;
-        opt.textContent = c.name !== undefined ? c.name : c;
+        opt.value = c.id !== undefined ? c.id : String(c);
+        opt.textContent = c.name !== undefined ? c.name : String(c);
         sel.appendChild(opt);
       });
     }
 
+    function showError(msg) {
+      document.getElementById('loading-state').style.display = 'none';
+      document.getElementById('pay-form').style.display = 'none';
+      var el = document.getElementById('error-state');
+      el.innerHTML = msg + '<br><small style="color:#94a3b8">Contacte a soporte@alegatto.com</small>';
+      el.style.display = 'block';
+    }
+
     function doPay() {
       var btn = document.getElementById('btn-pay');
-      var sp = document.getElementById('spinner');
+      var sp  = document.getElementById('btn-spinner');
       btn.disabled = true;
       sp.style.display = 'inline-block';
       try {
@@ -1169,56 +1209,74 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
       } catch(e) {
         btn.disabled = false;
         sp.style.display = 'none';
-        alert('Error al procesar el pago: ' + e.message);
+        showError('Error al procesar el pago: ' + e.message);
       }
     }
 
+    // Wait for payform global (loaded async by Tilopay SDK via tlpy_include)
+    function waitForPayform(tries, cb) {
+      if (typeof payform !== 'undefined') { cb(); return; }
+      if (tries <= 0) { cb(new Error('payform no cargó')); return; }
+      setTimeout(function() { waitForPayform(tries - 1, cb); }, 150);
+    }
+
     $(document).ready(function() {
-      try {
-        var init = Tilopay.Init({
-          token: "${apiKey}",
-          currency: "USD",
-          language: "es",
-          amount: ${amount},
-          orderNumber: "${orderNumber}",
-          capture: 1,
-          subscription: 1,
-          redirect: "${callbackUrl}",
-          billToEmail: "${email}",
-          billToFirstName: "${firstName}",
-          billToLastName: "${lastName}",
-          billToCountry: "CR",
-          billToCity: "San Jose",
-          billToState: "SJ",
-          billToAddress: "Costa Rica",
-          billToAddress2: "",
-          billToZipPostCode: "10101",
-          billToTelephone: "00000000",
-          shipToFirstName: "${firstName}",
-          shipToLastName: "${lastName}",
-          shipToCountry: "CR",
-          shipToCity: "San Jose",
-          shipToState: "SJ",
-          shipToAddress: "Costa Rica",
-          shipToAddress2: "",
-          shipToZipPostCode: "10101",
-          shipToTelephone: "00000000",
-          typeDni: 1,
-          dni: "100000000"
-        });
-        if (init && init.methods) chargeMethods(init.methods);
-        if (init && init.cards) chargeCards(init.cards);
-        if (init && init.methods && init.methods.length > 0) {
-          document.getElementById('btn-pay').disabled = false;
+      // payform is loaded asynchronously by the SDK — wait up to ~6 s
+      waitForPayform(40, function(err) {
+        if (err) { showError('No se pudo cargar la librería de pago. Por favor recargue la página.'); return; }
+
+        var initResult;
+        try {
+          initResult = Tilopay.Init({
+            token: "${apiKey}",
+            currency: "USD",
+            language: "es",
+            amount: ${amount},
+            orderNumber: "${orderNumber}",
+            capture: 1,
+            subscription: 1,
+            redirect: "${callbackUrl}",
+            billToEmail: "${email}",
+            billToFirstName: "${firstName}",
+            billToLastName: "${lastName}",
+            billToCountry: "CR",
+            billToCity: "San Jose",
+            billToState: "SJ",
+            billToAddress: "Costa Rica",
+            billToAddress2: "",
+            billToZipPostCode: "10101",
+            billToTelephone: "00000000",
+            shipToFirstName: "${firstName}",
+            shipToLastName: "${lastName}",
+            shipToCountry: "CR",
+            shipToCity: "San Jose",
+            shipToState: "SJ",
+            shipToAddress: "Costa Rica",
+            shipToAddress2: "",
+            shipToZipPostCode: "10101",
+            shipToTelephone: "00000000",
+            typeDni: 1,
+            dni: "100000000"
+          });
+        } catch(e) {
+          showError('Error iniciando Tilopay: ' + e.message);
+          return;
         }
-      } catch(e) {
+
+        if (!initResult || initResult.message !== 'Success') {
+          showError('No se pudo iniciar el formulario: ' + (initResult ? initResult.message : 'sin respuesta'));
+          return;
+        }
+
+        // Populate selects
+        if (initResult.methods) chargeMethods(initResult.methods);
+        if (initResult.cards)   chargeCards(initResult.cards);
+
+        // Show form, enable button
+        document.getElementById('loading-state').style.display = 'none';
+        document.getElementById('pay-form').style.display = 'block';
         document.getElementById('btn-pay').disabled = false;
-        document.body.insertAdjacentHTML('beforeend',
-          '<div class="error-box" style="position:fixed;bottom:20px;left:50%;transform:translateX(-50%);max-width:400px;z-index:999">' +
-          'Error al cargar el formulario de pago: ' + e.message +
-          '<br><small>Contacte a soporte@alegatto.com</small></div>'
-        );
-      }
+      });
     });
   </script>
 </body>
