@@ -6,8 +6,10 @@
  * Layer C: PostgreSQL FTS (plainto_tsquery Spanish) for semantic coverage
  */
 import { db } from "./db";
-import { sql, asc } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { rawDocuments } from "@shared/schema";
+import { readFileSync, existsSync } from "fs";
+import { join } from "path";
 
 export interface LegalArticle {
   id: string;
@@ -33,6 +35,70 @@ const codeIndex: Record<string, Map<string, LegalArticle[]>> = {};
 // Maps materia → fuente for fast materia-based lookups
 const materiaToFuentes: Record<string, string[]> = {};
 
+async function seedFromCorpusFile(): Promise<void> {
+  const paths = [
+    join(process.cwd(), "server", "legal-corpus.json"),
+    join(process.cwd(), "legal-corpus.json"),
+    join(__dirname, "legal-corpus.json"),
+  ];
+  let corpusPath: string | null = null;
+  for (const p of paths) {
+    if (existsSync(p)) { corpusPath = p; break; }
+  }
+  if (!corpusPath) {
+    console.error("[LegalPipeline] No corpus file found, cannot seed.");
+    return;
+  }
+
+  console.log(`[LegalPipeline] Seeding DB from ${corpusPath}...`);
+  const articles: { fuente: string; materia: string; articulo: string | null; contenido: string }[] =
+    JSON.parse(readFileSync(corpusPath, "utf-8"));
+
+  const BATCH = 200;
+  for (let i = 0; i < articles.length; i += BATCH) {
+    const batch = articles.slice(i, i + BATCH);
+    await db.insert(rawDocuments).values(
+      batch.map(a => ({
+        fuente: a.fuente,
+        materia: a.materia,
+        articulo: a.articulo,
+        contenido: a.contenido,
+      }))
+    );
+  }
+  console.log(`[LegalPipeline] Seeded ${articles.length} articles into DB`);
+}
+
+function buildCacheFromRows(rows: LegalArticle[]) {
+  for (const row of rows) {
+    if (!codeCache[row.fuente]) {
+      codeCache[row.fuente] = [];
+      codeIndex[row.fuente] = new Map();
+    }
+    codeCache[row.fuente].push(row);
+
+    if (row.articulo) {
+      const numMatch = row.articulo.match(/^(?:Art[íi]culo|ARTICULO)\s+(\d+)/i);
+      if (numMatch) {
+        const key = numMatch[1];
+        const arr = codeIndex[row.fuente].get(key) || [];
+        arr.push(row);
+        codeIndex[row.fuente].set(key, arr);
+      }
+    }
+
+    const materiaKey = row.materia;
+    if (!materiaToFuentes[materiaKey]) materiaToFuentes[materiaKey] = [];
+    if (!materiaToFuentes[materiaKey].includes(row.fuente)) {
+      materiaToFuentes[materiaKey].push(row.fuente);
+    }
+    const materiaKeyNorm = normalizeText(materiaKey);
+    if (materiaKeyNorm !== materiaKey && !materiaToFuentes[materiaKeyNorm]) {
+      materiaToFuentes[materiaKeyNorm] = materiaToFuentes[materiaKey];
+    }
+  }
+}
+
 export async function ensureCacheLoaded() {
   if (cacheLoaded) return;
   cacheLoaded = true;
@@ -40,46 +106,36 @@ export async function ensureCacheLoaded() {
   try {
     const countResult = await db.execute(sql`SELECT COUNT(*)::int as cnt FROM documents`);
     const countRows = extractRows(countResult);
-    console.log(`[LegalPipeline] DB count query result type=${typeof countResult}, isArray=${Array.isArray(countResult)}, keys=${Object.keys(countResult || {}).join(",")}, countRows=${JSON.stringify(countRows.slice(0,2))}`);
+    const dbCount = countRows[0]?.cnt ?? 0;
+
+    if (dbCount === 0) {
+      console.log("[LegalPipeline] DB empty — seeding from corpus file...");
+      await seedFromCorpusFile();
+    }
 
     const rawResult = await db.execute(sql`
       SELECT id, fuente, materia, articulo, contenido FROM documents ORDER BY fuente, id
     `);
-    console.log(`[LegalPipeline] Raw result type=${typeof rawResult}, isArray=${Array.isArray(rawResult)}, constructor=${rawResult?.constructor?.name}, keys=${Object.keys(rawResult || {}).join(",")}`);
-    if (!Array.isArray(rawResult) && rawResult?.rows) {
-      console.log(`[LegalPipeline] result.rows type=${typeof rawResult.rows}, isArray=${Array.isArray(rawResult.rows)}, length=${rawResult.rows?.length}`);
-    }
-
     const rows = extractRows(rawResult) as LegalArticle[];
 
-    for (const row of rows) {
-      if (!codeCache[row.fuente]) {
-        codeCache[row.fuente] = [];
-        codeIndex[row.fuente] = new Map();
-      }
-      codeCache[row.fuente].push(row);
-
-      if (row.articulo) {
-        const numMatch = row.articulo.match(/^(?:Art[íi]culo|ARTICULO)\s+(\d+)/i);
-        if (numMatch) {
-          const key = numMatch[1];
-          const arr = codeIndex[row.fuente].get(key) || [];
-          arr.push(row);
-          codeIndex[row.fuente].set(key, arr);
+    if (rows.length === 0) {
+      console.log("[LegalPipeline] DB still empty after seed, loading directly from JSON...");
+      const paths = [
+        join(process.cwd(), "server", "legal-corpus.json"),
+        join(process.cwd(), "legal-corpus.json"),
+        join(__dirname, "legal-corpus.json"),
+      ];
+      for (const p of paths) {
+        if (existsSync(p)) {
+          const articles = JSON.parse(readFileSync(p, "utf-8")) as LegalArticle[];
+          buildCacheFromRows(articles.map((a, i) => ({ ...a, id: String(i) })));
+          console.log(`[LegalPipeline] Loaded ${articles.length} articles from JSON file (in-memory only)`);
+          return;
         }
-      }
-
-      const materiaKey = row.materia;
-      if (!materiaToFuentes[materiaKey]) materiaToFuentes[materiaKey] = [];
-      if (!materiaToFuentes[materiaKey].includes(row.fuente)) {
-        materiaToFuentes[materiaKey].push(row.fuente);
-      }
-      const materiaKeyNorm = normalizeText(materiaKey);
-      if (materiaKeyNorm !== materiaKey && !materiaToFuentes[materiaKeyNorm]) {
-        materiaToFuentes[materiaKeyNorm] = materiaToFuentes[materiaKey];
       }
     }
 
+    buildCacheFromRows(rows);
     console.log(`[LegalPipeline] Loaded ${rows.length} articles from ${Object.keys(codeCache).length} codes`);
   } catch (e) {
     console.error("[LegalPipeline] Cache load failed:", e);
