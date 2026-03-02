@@ -5,9 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload, FileText, AlertTriangle, ChevronDown, ChevronUp,
   Download, FolderPlus, Loader2, Shield, Users, BookOpen,
-  CheckCircle, XCircle, Info, Gavel, MessageSquare, Send, Bot, User, FileDown
+  CheckCircle, XCircle, Info, Gavel, MessageSquare, Send, Bot, User, FileDown,
+  Bell, Calendar, X, CalendarPlus
 } from "lucide-react";
 import { toast } from "sonner";
+import { queryClient } from "@/lib/queryClient";
 import {
   Document, Packer, Paragraph, TextRun, HeadingLevel,
   AlignmentType, TableRow, TableCell, Table, WidthType
@@ -258,6 +260,17 @@ export default function AnalysisPage() {
   const [exporting, setExporting] = useState(false);
   const exportRef = useRef<HTMLDivElement>(null);
 
+  // ── Appeal reminder modal ──────────────────────────────
+  const [showReminder, setShowReminder] = useState(false);
+  const [reminderSaving, setReminderSaving] = useState(false);
+  const defaultDueDate = () => {
+    const d = new Date();
+    d.setDate(d.getDate() + 30);
+    return d.toISOString().split("T")[0];
+  };
+  const [reminderDate, setReminderDate] = useState(defaultDueDate);
+  const [reminderDesc, setReminderDesc] = useState("");
+
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
@@ -289,6 +302,17 @@ export default function AnalysisPage() {
       setFilename(data.filename);
       setDocText(data.docText ?? "");
       toast.success("Documento analizado exitosamente");
+
+      // Auto-trigger reminder modal for medium/high procedural risk
+      const risk = data.analysis?.procedural_risk?.level;
+      if (risk === "medium" || risk === "high") {
+        const recs = (data.analysis?.procedural_risk?.recommendations ?? []).join(" ");
+        setReminderDesc(
+          `Recurso de apelación – ${data.filename}. Riesgo: ${risk === "high" ? "Alto" : "Medio"}. ${recs}`
+        );
+        setReminderDate(defaultDueDate());
+        setShowReminder(true);
+      }
     } catch (err: any) {
       toast.error(err.message || "Error al analizar el documento");
     } finally {
@@ -303,6 +327,97 @@ export default function AnalysisPage() {
     multiple: false,
     disabled: loading,
   });
+
+  // ── Reminder functions ─────────────────────────────────
+  const saveReminderInApp = async () => {
+    if (!reminderDate || !reminderDesc.trim()) {
+      toast.error("Completá la fecha y descripción");
+      return;
+    }
+    setReminderSaving(true);
+    try {
+      await fetch("/api/deadlines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: reminderDesc, dueDate: reminderDate, status: "pending" }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/deadlines"] });
+      toast.success("Recordatorio guardado en LexAI");
+
+      // Browser push notification (if permission granted)
+      if (Notification.permission === "granted") {
+        new Notification("LexAI CR — Recordatorio de Apelación", {
+          body: `Fecha límite: ${new Date(reminderDate + "T12:00:00").toLocaleDateString("es-CR", { day: "numeric", month: "long", year: "numeric" })}`,
+          icon: "/favicon.ico",
+        });
+      } else if (Notification.permission !== "denied") {
+        const perm = await Notification.requestPermission();
+        if (perm === "granted") {
+          new Notification("LexAI CR — Recordatorio guardado", {
+            body: `Fecha límite: ${new Date(reminderDate + "T12:00:00").toLocaleDateString("es-CR", { day: "numeric", month: "long", year: "numeric" })}`,
+            icon: "/favicon.ico",
+          });
+        }
+      }
+
+      setShowReminder(false);
+    } catch {
+      toast.error("Error al guardar el recordatorio");
+    } finally {
+      setReminderSaving(false);
+    }
+  };
+
+  const openGoogleCalendar = () => {
+    const title = encodeURIComponent(`Apelación – ${filename}`);
+    const details = encodeURIComponent(reminderDesc);
+    // Google Calendar all-day event date format: YYYYMMDD
+    const dateStr = reminderDate.replace(/-/g, "");
+    const nextDay = (() => {
+      const d = new Date(reminderDate + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split("T")[0].replace(/-/g, "");
+    })();
+    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dateStr}/${nextDay}&details=${details}`;
+    window.open(url, "_blank", "noopener");
+  };
+
+  const downloadICS = () => {
+    const now = new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+    const dateStr = reminderDate.replace(/-/g, "");
+    const nextDay = (() => {
+      const d = new Date(reminderDate + "T12:00:00");
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split("T")[0].replace(/-/g, "");
+    })();
+    const desc = reminderDesc.replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//LexAI CR//ES",
+      "BEGIN:VEVENT",
+      `DTSTAMP:${now}`,
+      `DTSTART;VALUE=DATE:${dateStr}`,
+      `DTEND;VALUE=DATE:${nextDay}`,
+      `SUMMARY:Apelación – ${filename}`,
+      `DESCRIPTION:${desc}`,
+      "BEGIN:VALARM",
+      "TRIGGER:-P1D",
+      "ACTION:DISPLAY",
+      "DESCRIPTION:Recordatorio LexAI CR",
+      "END:VALARM",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ].join("\r\n");
+    const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `recordatorio-apelacion.ics`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Archivo .ics descargado — abrilo en tu app de calendario");
+  };
 
   const exportAsDocx = async () => {
     if (!analysis) return;
@@ -794,6 +909,122 @@ export default function AnalysisPage() {
           </AnimatePresence>
         </div>
       </div>
+      {/* ── Appeal Reminder Modal ───────────────────────── */}
+      <AnimatePresence>
+        {showReminder && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={(e) => { if (e.target === e.currentTarget) setShowReminder(false); }}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+            >
+              {/* Header */}
+              <div className="flex items-start justify-between p-5 border-b border-border bg-amber-500/5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center shrink-0">
+                    <Bell className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground">Recordatorio de Apelación</h3>
+                    <p className="text-xs text-amber-400 mt-0.5">
+                      {analysis?.procedural_risk.level === "high" ? "⚠ Riesgo Alto detectado" : "• Riesgo Medio detectado"}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowReminder(false)}
+                  className="p-1.5 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-close-reminder"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Este documento tiene oportunidades de apelación. ¿Deseas guardar un recordatorio?
+                </p>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Fecha límite de apelación</label>
+                  <input
+                    type="date"
+                    value={reminderDate}
+                    onChange={(e) => setReminderDate(e.target.value)}
+                    min={new Date().toISOString().split("T")[0]}
+                    className="w-full px-3 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                    data-testid="input-reminder-date"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Descripción</label>
+                  <textarea
+                    value={reminderDesc}
+                    onChange={(e) => setReminderDesc(e.target.value)}
+                    rows={3}
+                    className="w-full px-3 py-2.5 bg-secondary border border-border rounded-xl text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
+                    data-testid="input-reminder-desc"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="grid grid-cols-1 gap-2 pt-1">
+                  {/* Save in LexAI (primary) */}
+                  <button
+                    onClick={saveReminderInApp}
+                    disabled={reminderSaving}
+                    className="flex items-center justify-center gap-2.5 py-3 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition-opacity disabled:opacity-50"
+                    data-testid="button-save-reminder-app"
+                  >
+                    {reminderSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Bell className="w-4 h-4" />}
+                    Guardar en LexAI + Notificación
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {/* Google Calendar */}
+                    <button
+                      onClick={openGoogleCalendar}
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-foreground hover:bg-secondary/80 transition-colors"
+                      data-testid="button-google-calendar"
+                    >
+                      <CalendarPlus className="w-4 h-4 text-blue-400" />
+                      Google Calendar
+                    </button>
+
+                    {/* Download ICS */}
+                    <button
+                      onClick={downloadICS}
+                      className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border bg-secondary text-sm text-foreground hover:bg-secondary/80 transition-colors"
+                      data-testid="button-download-ics"
+                    >
+                      <Calendar className="w-4 h-4 text-emerald-400" />
+                      Descargar .ics
+                    </button>
+                  </div>
+
+                  <button
+                    onClick={() => setShowReminder(false)}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors py-1"
+                    data-testid="button-skip-reminder"
+                  >
+                    Omitir por ahora
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 }
