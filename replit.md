@@ -46,6 +46,13 @@ Full-stack legal AI SaaS platform for Costa Rica built with React + Express + Po
 | PUT | `/api/deadlines/:id` | Update deadline status |
 | GET | `/api/calendar/status` | Returns `{ connected: bool }` — whether user has Google Calendar tokens |
 | POST | `/api/calendar/create-event` | Creates event in user's Google Calendar via API (requires OAuth tokens); body: `{ summary, description, date }` |
+| GET | `/api/billing/status` | Returns `{ plan, stripeCustomerId, subscription }` for current org |
+| POST | `/api/billing/checkout` | Creates Stripe checkout session; body: `{ plan: "pro"\|"corporate" }`; returns `{ url }` |
+| POST | `/api/billing/verify` | Verifies Stripe session after redirect; body: `{ sessionId }`; updates org plan |
+| GET | `/api/billing/portal` | Creates Stripe customer portal session; returns `{ url }` |
+| GET | `/api/admin/beta-invites` | List beta invites (super admin only) |
+| POST | `/api/admin/beta-invites` | Create + email beta invite (super admin only) |
+| DELETE | `/api/admin/beta-invites/:id` | Delete beta invite (super admin only) |
 
 ## Database Schema
 Key tables: `users`, `conversations`, `messages`, `document_editors`, `document_versions`, `firma_requests`, `documents` (legal corpus with pgvector), `appeals`, `cases`, `case_events`, `case_notes`, `deadlines`, `organizations`, `org_members`

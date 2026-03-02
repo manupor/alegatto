@@ -21,6 +21,7 @@ import AnalyticsPage from "@/pages/AnalyticsPage";
 import TeamPage from "@/pages/TeamPage";
 import InvitePage from "@/pages/InvitePage";
 import AdminPage from "@/pages/AdminPage";
+import BillingPage from "@/pages/BillingPage";
 
 function Router() {
   return (
@@ -40,6 +41,7 @@ function Router() {
       <Route path="/dashboard/alerts" component={AlertsPage} />
       <Route path="/dashboard/analytics" component={AnalyticsPage} />
       <Route path="/dashboard/team" component={TeamPage} />
+      <Route path="/dashboard/billing" component={BillingPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={NotFound} />
     </Switch>

@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import {
   MessageSquare, FileText, LogOut, Scale,
   Gavel, FolderOpen, Bell, BarChart3, FileSearch,
-  Home, Users
+  Home, Users, CreditCard
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrgContext } from "@/hooks/use-org";
@@ -35,6 +35,7 @@ export function Sidebar() {
         { label: "Alertas", path: "/dashboard/alerts", icon: Bell },
         ...(isAdmin ? [{ label: "Analíticas", path: "/dashboard/analytics", icon: BarChart3 }] : []),
         ...(isAdmin ? [{ label: "Equipo", path: "/dashboard/team", icon: Users }] : []),
+        { label: "Facturación", path: "/dashboard/billing", icon: CreditCard },
       ],
     },
   ];

@@ -1019,5 +1019,125 @@ Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho p
     res.status(204).send();
   });
 
+  // ── Billing (Stripe) ──────────────────────────────────────────────────────
+
+  app.get("/api/billing/status", requireAuth, async (req, res) => {
+    try {
+      const membership = await storage.getOrgMembership(getUserId(req));
+      if (!membership) return res.json({ plan: "free", subscription: null });
+      const org = membership.org;
+      let subscription = null;
+      if (org.stripeSubscriptionId) {
+        const result = await db.execute(sql`SELECT status, current_period_end FROM stripe.subscriptions WHERE id = ${org.stripeSubscriptionId} LIMIT 1`);
+        subscription = result.rows[0] || null;
+      }
+      res.json({ plan: org.plan, stripeCustomerId: org.stripeCustomerId, subscription });
+    } catch (e: any) {
+      console.warn("[billing/status]", e.message);
+      res.json({ plan: "free", subscription: null });
+    }
+  });
+
+  app.post("/api/billing/checkout", requireAuth, async (req, res) => {
+    try {
+      const { plan } = req.body;
+      if (!["pro", "corporate"].includes(plan)) return res.status(400).json({ message: "Plan inválido" });
+      const membership = await storage.getOrgMembership(getUserId(req));
+      if (!membership) return res.status(404).json({ message: "Organización no encontrada" });
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+
+      const priceResult = await db.execute(sql`
+        SELECT pr.id as price_id FROM stripe.prices pr
+        JOIN stripe.products p ON pr.product = p.id
+        WHERE p.metadata->>'plan' = ${plan} AND pr.active = true AND p.active = true
+        LIMIT 1
+      `);
+      if (priceResult.rows.length === 0) return res.status(404).json({ message: "Plan no encontrado en Stripe. Ejecute el seed de productos." });
+      const priceId = priceResult.rows[0].price_id as string;
+
+      let customerId = membership.org.stripeCustomerId;
+      if (!customerId) {
+        const userId = getUserId(req);
+        const [userRecord] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId));
+        const customer = await stripe.customers.create({
+          email: userRecord?.email ?? "",
+          metadata: { orgId: membership.orgId },
+        });
+        await storage.updateOrg(membership.orgId, { stripeCustomerId: customer.id });
+        customerId = customer.id;
+      }
+
+      const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        mode: "subscription",
+        success_url: `${appUrl}/dashboard/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${appUrl}/dashboard/billing`,
+        metadata: { orgId: membership.orgId, plan },
+      });
+
+      res.json({ url: session.url });
+    } catch (e: any) {
+      console.error("[billing/checkout]", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.post("/api/billing/verify", requireAuth, async (req, res) => {
+    try {
+      const { sessionId } = req.body;
+      if (!sessionId) return res.status(400).json({ message: "sessionId requerido" });
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      if (session.payment_status !== "paid") return res.status(400).json({ message: "Pago no completado" });
+
+      const orgId = session.metadata?.orgId;
+      const plan = session.metadata?.plan;
+      if (!orgId || !plan) return res.status(400).json({ message: "Sesión inválida" });
+
+      const membership = await storage.getOrgMembership(getUserId(req));
+      if (!membership || membership.orgId !== orgId) return res.status(403).json({ message: "Acceso denegado" });
+
+      const dbPlan = plan === "corporate" ? "enterprise" : "pro";
+      await storage.updateOrg(orgId, {
+        plan: dbPlan,
+        stripeCustomerId: session.customer as string,
+        stripeSubscriptionId: session.subscription as string,
+      });
+
+      res.json({ plan: dbPlan });
+    } catch (e: any) {
+      console.error("[billing/verify]", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/billing/portal", requireAuth, async (req, res) => {
+    try {
+      const membership = await storage.getOrgMembership(getUserId(req));
+      if (!membership?.org.stripeCustomerId) return res.status(400).json({ message: "Sin suscripción activa" });
+
+      const { getUncachableStripeClient } = await import("./stripeClient");
+      const stripe = await getUncachableStripeClient();
+      const appUrl = process.env.APP_URL || `${req.protocol}://${req.get("host")}`;
+      const portal = await stripe.billingPortal.sessions.create({
+        customer: membership.org.stripeCustomerId,
+        return_url: `${appUrl}/dashboard/billing`,
+      });
+
+      res.json({ url: portal.url });
+    } catch (e: any) {
+      console.error("[billing/portal]", e.message);
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   return httpServer;
 }
