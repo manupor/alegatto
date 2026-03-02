@@ -63,9 +63,16 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose} className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-card border border-border rounded-2xl shadow-2xl z-50 p-6">
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed bottom-0 inset-x-0 z-50 bg-card border-t border-border rounded-t-2xl shadow-2xl max-h-[90vh] overflow-y-auto md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-md md:rounded-2xl md:border md:border-border">
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+        </div>
+        <div className="p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-semibold text-foreground">Invitar miembro</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-5 h-5" /></button>
@@ -131,6 +138,7 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
             </button>
           </div>
         )}
+        </div>
       </motion.div>
     </>
   );
@@ -141,16 +149,24 @@ function ConfirmRemoveModal({ memberName, onConfirm, onClose }: { memberName: st
     <>
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
         onClick={onClose} className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" />
-      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-sm bg-card border border-border rounded-2xl shadow-2xl z-50 p-6 text-center">
-        <UserMinus className="w-10 h-10 text-destructive mx-auto mb-3" />
-        <h2 className="font-semibold text-foreground mb-1">¿Eliminar miembro?</h2>
-        <p className="text-sm text-muted-foreground mb-5">Se eliminará a <strong>{memberName}</strong> del despacho. Esta acción no se puede deshacer.</p>
-        <div className="flex gap-3">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
-          <button onClick={onConfirm} data-testid="button-confirm-remove"
-            className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors">Eliminar</button>
+      <motion.div
+        initial={{ y: "100%" }}
+        animate={{ y: 0 }}
+        exit={{ y: "100%" }}
+        transition={{ type: "spring", damping: 30, stiffness: 300 }}
+        className="fixed bottom-0 inset-x-0 z-50 bg-card border-t border-border rounded-t-2xl shadow-2xl md:inset-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:w-full md:max-w-sm md:rounded-2xl md:border md:border-border">
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="w-10 h-1 rounded-full bg-muted-foreground/30" />
+        </div>
+        <div className="p-6 text-center">
+          <UserMinus className="w-10 h-10 text-destructive mx-auto mb-3" />
+          <h2 className="font-semibold text-foreground mb-1">¿Eliminar miembro?</h2>
+          <p className="text-sm text-muted-foreground mb-5">Se eliminará a <strong>{memberName}</strong> del despacho. Esta acción no se puede deshacer.</p>
+          <div className="flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-border text-sm text-muted-foreground hover:text-foreground transition-colors">Cancelar</button>
+            <button onClick={onConfirm} data-testid="button-confirm-remove"
+              className="flex-1 py-2.5 rounded-lg bg-destructive text-white text-sm font-semibold hover:bg-destructive/90 transition-colors">Eliminar</button>
+          </div>
         </div>
       </motion.div>
     </>
