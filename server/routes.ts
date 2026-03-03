@@ -13,7 +13,7 @@ const pdfParse: (buffer: Buffer) => Promise<{ text: string }> =
   createRequire(process.cwd() + "/package.json")("pdf-parse");
 import { runLegalPipeline, LEGAL_SYSTEM_PROMPT, ensureCacheLoaded } from "./legal-pipeline";
 import { passport, bcrypt } from "./auth";
-import { users } from "@shared/schema";
+import { users, organizations } from "@shared/schema";
 import { sendInviteEmail } from "./email";
 
 // ── Google token refresh helper ───────────────────────────
@@ -440,6 +440,27 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(invites);
   });
 
+  const PLAN_MEMBER_LIMITS: Record<string, number> = {
+    free: 1,
+    pro: 3,
+    enterprise: 999,
+  };
+
+  const getPlanMemberLimit = (plan: string) => PLAN_MEMBER_LIMITS[plan] ?? 1;
+
+  app.get("/api/org/member-limit", async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, org } = await getOrgCtx(userId) as any;
+    if (!orgId) return res.status(403).json({ message: "Sin organización" });
+    const members = await storage.getOrgMembers(orgId);
+    const invites = await storage.getOrgInvites(orgId);
+    const plan = org?.plan ?? "free";
+    const max = getPlanMemberLimit(plan);
+    const current = members.length;
+    const pending = invites.length;
+    res.json({ plan, max, current, pending, canInvite: current + pending < max });
+  });
+
   app.post("/api/org/invite", async (req, res) => {
     try {
       const userId = getUserId(req);
@@ -448,6 +469,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
       const { email, role: inviteRole = "assistant" } = req.body;
       if (!email) return res.status(400).json({ message: "email required" });
+
+      // Enforce member limit per plan
+      const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+      const planLimit = getPlanMemberLimit(org?.plan ?? "free");
+      const currentMembers = await storage.getOrgMembers(orgId);
+      const pendingInvites = await storage.getOrgInvites(orgId);
+      if (currentMembers.length + pendingInvites.length >= planLimit) {
+        const planLabel = org?.plan === "enterprise" ? "Corporativo" : org?.plan === "pro" ? "Pro" : "Gratuito";
+        return res.status(403).json({
+          message: `Tu plan ${planLabel} permite un máximo de ${planLimit} miembro${planLimit === 1 ? "" : "s"}. Actualiza tu plan para agregar más usuarios.`,
+          code: "MEMBER_LIMIT_REACHED",
+          max: planLimit,
+        });
+      }
 
       const token = randomUUID();
       const invite = await storage.createOrgInvite({ orgId, email, role: inviteRole, token });
@@ -509,6 +544,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const existing = await storage.getOrgMembership(userId);
       if (existing?.orgId === invite.orgId) {
         return res.json({ message: "Ya eres miembro de esta organización", orgId: invite.orgId });
+      }
+
+      // Enforce member limit (re-check at accept time)
+      const [inviteOrg] = await db.select().from(organizations).where(eq(organizations.id, invite.orgId)).limit(1);
+      const inviteLimit = getPlanMemberLimit(inviteOrg?.plan ?? "free");
+      const inviteCurrentMembers = await storage.getOrgMembers(invite.orgId);
+      if (inviteCurrentMembers.length >= inviteLimit) {
+        return res.status(403).json({ message: "La organización ha alcanzado el límite de usuarios de su plan.", code: "MEMBER_LIMIT_REACHED" });
       }
 
       // Add to org

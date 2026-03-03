@@ -36,20 +36,25 @@ function InviteModal({ orgId, onClose }: { orgId: string; onClose: () => void })
   const [copied, setCopied] = useState(false);
 
   const { mutate: invite, isPending } = useMutation({
-    mutationFn: (data: { email: string; role: string }) =>
-      fetch("/api/org/invite", {
+    mutationFn: async (data: { email: string; role: string }) => {
+      const r = await fetch("/api/org/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
         credentials: "include",
-      }).then(r => r.json()),
+      });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json.message || "Error al crear invitación");
+      return json;
+    },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/org/invites"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/org/member-limit"] });
       setInviteLink(data.inviteLink);
       setEmailSent(!!data.emailSent);
       toast.success(data.emailSent ? "Invitación enviada por correo" : "Invitación creada");
     },
-    onError: () => toast.error("Error al crear invitación"),
+    onError: (err: any) => toast.error(err.message || "Error al crear invitación"),
   });
 
   const copyLink = () => {
@@ -192,6 +197,15 @@ export default function TeamPage() {
     enabled: isAdmin,
   });
 
+  const { data: memberLimit } = useQuery<{ plan: string; max: number; current: number; pending: number; canInvite: boolean }>({
+    queryKey: ["/api/org/member-limit"],
+    queryFn: () => fetch("/api/org/member-limit", { credentials: "include" }).then(r => r.ok ? r.json() : null),
+    enabled: isAdmin,
+  });
+
+  const atLimit = memberLimit ? !memberLimit.canInvite : false;
+  const isEnterprise = memberLimit?.plan === "enterprise";
+
   const { mutate: changeRole } = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) =>
       fetch(`/api/org/members/${id}/role`, {
@@ -244,13 +258,53 @@ export default function TeamPage() {
               {org?.name} — Miembros y permisos
             </p>
           </div>
-          <button onClick={() => setShowInviteModal(true)} data-testid="button-invite-member"
-            className="flex items-center gap-1.5 px-3 py-2 md:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shrink-0">
+          <button
+            onClick={() => atLimit ? undefined : setShowInviteModal(true)}
+            disabled={atLimit}
+            title={atLimit ? `Límite alcanzado (${memberLimit?.current}/${memberLimit?.max}). Actualiza tu plan para agregar más.` : "Invitar miembro"}
+            data-testid="button-invite-member"
+            className="flex items-center gap-1.5 px-3 py-2 md:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold shrink-0 disabled:opacity-40 disabled:cursor-not-allowed">
             <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Invitar miembro</span><span className="sm:hidden">Invitar</span>
           </button>
         </header>
 
         <div className="flex-1 p-6 md:p-8 max-w-5xl mx-auto w-full space-y-8">
+
+          {/* Plan member limit banner */}
+          {memberLimit && (
+            <div className={`rounded-xl border p-4 flex flex-col sm:flex-row sm:items-center gap-3 ${atLimit ? "border-amber-500/40 bg-amber-500/5" : "border-border bg-card"}`}>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="text-sm font-semibold text-foreground">
+                    {memberLimit.current} / {isEnterprise ? "∞" : memberLimit.max} usuarios
+                  </span>
+                  <span className="text-xs text-muted-foreground capitalize px-2 py-0.5 rounded-full border border-border bg-secondary">
+                    Plan {memberLimit.plan === "enterprise" ? "Corporativo" : memberLimit.plan === "pro" ? "Pro" : "Gratuito"}
+                  </span>
+                  {memberLimit.pending > 0 && (
+                    <span className="text-xs text-amber-500 px-2 py-0.5 rounded-full border border-amber-500/30 bg-amber-500/10">
+                      {memberLimit.pending} invitación{memberLimit.pending !== 1 ? "es" : ""} pendiente{memberLimit.pending !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                {!isEnterprise && (
+                  <div className="w-full bg-secondary rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${atLimit ? "bg-amber-500" : "bg-primary"}`}
+                      style={{ width: `${Math.min(100, ((memberLimit.current + memberLimit.pending) / memberLimit.max) * 100)}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+              {atLimit && !isEnterprise && (
+                <a href="/dashboard/billing"
+                  className="shrink-0 text-xs font-semibold px-3 py-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors whitespace-nowrap">
+                  Mejorar plan
+                </a>
+              )}
+            </div>
+          )}
+
           {/* Members */}
           <section>
             <h2 className="font-semibold text-foreground mb-4 flex items-center gap-2">
