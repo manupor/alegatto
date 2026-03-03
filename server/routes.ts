@@ -158,10 +158,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return "";
   };
 
-  const requireAuth = (req: any, res: any, next: any) => {
-    if (req.user?.id) return next();
-    if (process.env.NODE_ENV !== "production") return next();
-    return res.status(401).json({ message: "No autenticado" });
+  const issueDeviceToken = async (userId: string, req: any) => {
+    const token = randomUUID();
+    await db.update(users).set({ currentSessionId: token }).where(eq(users.id, userId));
+    req.session.deviceToken = token;
+  };
+
+  const requireAuth = async (req: any, res: any, next: any) => {
+    if (process.env.NODE_ENV !== "production") {
+      if (req.user?.id) {
+        const sessionToken: string | undefined = req.session?.deviceToken;
+        const userSessionId: string | null | undefined = req.user?.currentSessionId;
+        if (sessionToken && userSessionId && sessionToken !== userSessionId) {
+          req.logout(() => {});
+          return res.status(401).json({ message: "Sesión cerrada — tu cuenta fue abierta en otro dispositivo.", code: "SESSION_REPLACED" });
+        }
+      }
+      return next();
+    }
+    if (!req.user?.id) return res.status(401).json({ message: "No autenticado" });
+    const sessionToken: string | undefined = req.session?.deviceToken;
+    const userSessionId: string | null | undefined = req.user?.currentSessionId;
+    if (sessionToken && userSessionId && sessionToken !== userSessionId) {
+      req.logout(() => {});
+      return res.status(401).json({ message: "Sesión cerrada — tu cuenta fue abierta en otro dispositivo.", code: "SESSION_REPLACED" });
+    }
+    return next();
   };
 
   // ──────────────────────────────────────────
@@ -201,6 +223,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
       req.logIn(user, async (loginErr) => {
         if (loginErr) return next(loginErr);
+        await issueDeviceToken(user.id, req);
         const { org, role } = await getOrgCtx(user.id);
         return res.json({ id: user.id, email: user.email, name: user.name, org, role });
       });
@@ -222,8 +245,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         .values({ email, password: hash, name: name ?? null, plan: "FREE" })
         .returning();
 
-      req.logIn({ id: newUser.id, email: newUser.email, name: newUser.name, plan: newUser.plan }, (err) => {
+      req.logIn({ id: newUser.id, email: newUser.email, name: newUser.name, plan: newUser.plan }, async (err) => {
         if (err) return res.status(500).json({ message: "Error al crear sesión" });
+        await issueDeviceToken(newUser.id, req);
         return res.status(201).json({ id: newUser.id, email: newUser.email, name: newUser.name });
       });
     } catch (err: any) {
@@ -251,7 +275,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", { failureRedirect: "/?error=google_auth_failed" }),
-    (req, res) => {
+    async (req, res) => {
+      if (req.user?.id) await issueDeviceToken(req.user.id, req);
       res.redirect("/dashboard");
     },
   );

@@ -18,6 +18,7 @@ declare global {
       name: string | null;
       plan: string;
       avatarUrl?: string | null;
+      currentSessionId?: string | null;
     }
   }
 }
@@ -196,6 +197,7 @@ export async function setupAuth(app: Express) {
         name: user.name,
         plan: user.plan,
         avatarUrl: user.avatarUrl,
+        currentSessionId: user.currentSessionId,
       });
     } catch (err) {
       done(err);

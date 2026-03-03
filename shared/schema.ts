@@ -20,6 +20,7 @@ export const users = pgTable("users", {
   googleRefreshToken: text("google_refresh_token"),
   plan: text("plan").default("FREE").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  currentSessionId: text("current_session_id"),
 });
 
 // Multi-tenant: Organizations

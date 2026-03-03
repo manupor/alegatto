@@ -1,8 +1,10 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
+import { useEffect } from "react";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster as ShadcnToaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "sonner";
+import { toast } from "sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/not-found";
 
@@ -56,12 +58,30 @@ function Router() {
   );
 }
 
+function SessionGuard() {
+  const [, setLocation] = useLocation();
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const msg = (e as CustomEvent).detail as string;
+      queryClient.clear();
+      toast.warning(msg || "Tu sesión fue cerrada porque iniciaste sesión en otro dispositivo.", {
+        duration: 8000,
+      });
+      setLocation("/auth");
+    };
+    window.addEventListener("session-replaced", handler);
+    return () => window.removeEventListener("session-replaced", handler);
+  }, [setLocation]);
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <SonnerToaster theme="dark" position="top-center" richColors />
         <ShadcnToaster />
+        <SessionGuard />
         <Router />
       </TooltipProvider>
     </QueryClientProvider>

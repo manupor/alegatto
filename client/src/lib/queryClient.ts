@@ -2,8 +2,13 @@ import { QueryClient, QueryFunction } from "@tanstack/react-query";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
-    const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let body: any;
+    try { body = await res.json(); } catch { body = { message: res.statusText }; }
+    if (res.status === 401 && body?.code === "SESSION_REPLACED") {
+      window.dispatchEvent(new CustomEvent("session-replaced", { detail: body.message }));
+      throw new Error("SESSION_REPLACED");
+    }
+    throw new Error(`${res.status}: ${body?.message ?? res.statusText}`);
   }
 }
 
@@ -34,6 +39,12 @@ export const getQueryFn: <T>(options: {
     });
 
     if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      let body: any;
+      try { body = await res.clone().json(); } catch { body = null; }
+      if (body?.code === "SESSION_REPLACED") {
+        window.dispatchEvent(new CustomEvent("session-replaced", { detail: body.message }));
+        throw new Error("SESSION_REPLACED");
+      }
       return null;
     }
 
