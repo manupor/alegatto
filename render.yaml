@@ -48,5 +48,5 @@ databases:
   # PostgreSQL Database with pgvector
   - name: lexai-cr-db
     databaseName: lexai_cr
-    plan: starter
+    plan: free
     postgresMajorVersion: 16
