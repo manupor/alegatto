@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { useQuery } from "@tanstack/react-query";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronRight, ChevronLeft, Plus, Trash2, GripVertical,
@@ -67,6 +68,11 @@ export default function AppealNewPage() {
   const [manualJurisprudence, setManualJurisprudence] = useState("");
   const [normativaLoading, setNormativaLoading] = useState(false);
   // Step 5
+  const { data: templateData } = useQuery<{ template: { name: string } | null }>({
+    queryKey: ["/api/org/writing-template"],
+    queryFn: () => fetch("/api/org/writing-template", { credentials: "include" }).then(r => r.ok ? r.json() : { template: null }),
+  });
+  const hasTemplate = !!templateData?.template;
   const [writingStyle, setWritingStyle] = useState("technical");
   const [lawyerName, setLawyerName] = useState("");
   const [barNumber, setBarNumber] = useState("");
@@ -463,6 +469,17 @@ export default function AppealNewPage() {
                 {step === 4 && (
                   <div className="space-y-5">
                     <h2 className="text-xl font-semibold text-foreground mb-6">Configuración del documento</h2>
+                    {hasTemplate && (
+                      <div className="rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3 flex items-center gap-2.5">
+                        <FileText className="w-4 h-4 text-green-500 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground">Plantilla del despacho activa</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            La IA usará el estilo de <strong>{templateData?.template?.name}</strong> como referencia
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <label className="block text-sm text-muted-foreground mb-2">Estilo de redacción</label>
                       <div className="grid grid-cols-3 gap-3">

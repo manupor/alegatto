@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrgContext } from "@/hooks/use-org";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { toast } from "sonner";
 import {
   User, Mail, Building2, Shield, Zap, CreditCard,
-  Edit2, Check, X, Crown, BadgeCheck, Loader2
+  Edit2, Check, X, Crown, BadgeCheck, Loader2,
+  FileText, Upload, Trash2, FileCheck2
 } from "lucide-react";
 
 const PLAN_CONFIG: Record<string, {
@@ -260,8 +261,132 @@ export default function ProfilePage() {
             </button>
           </div>
 
+          {/* Writing Template */}
+          <WritingTemplateCard isAdmin={isAdmin} />
+
         </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+function WritingTemplateCard({ isAdmin }: { isAdmin: boolean }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery<{ template: { name: string; excerpt: string; length: number } | null }>({
+    queryKey: ["/api/org/writing-template"],
+    queryFn: () => fetch("/api/org/writing-template", { credentials: "include" }).then(r => r.ok ? r.json() : { template: null }),
+  });
+
+  const template = data?.template ?? null;
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const r = await fetch("/api/org/writing-template", { method: "POST", body: form, credentials: "include" });
+      const json = await r.json();
+      if (!r.ok) throw new Error(json.message);
+      toast.success(`Plantilla "${file.name}" guardada — ${json.length} caracteres extraídos`);
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/org/writing-template"] });
+    } catch (err: any) {
+      toast.error(err.message || "Error al subir plantilla");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await fetch("/api/org/writing-template", { method: "DELETE", credentials: "include" });
+      toast.success("Plantilla eliminada");
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/org/writing-template"] });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-2xl border border-border bg-card p-6">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+          <FileText className="w-4 h-4" /> Plantilla de escritura del despacho
+        </h2>
+      </div>
+      <p className="text-xs text-muted-foreground mb-5">
+        Sube un escrito real de tu despacho (PDF o DOCX). La IA lo usará como referencia de estilo, formato y tono al generar recursos y documentos.
+      </p>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
+          <Loader2 className="w-4 h-4 animate-spin" /> Cargando…
+        </div>
+      ) : template ? (
+        <div className="space-y-3">
+          <div className="rounded-xl border border-green-500/20 bg-green-500/5 p-4">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <FileCheck2 className="w-5 h-5 text-green-500 shrink-0" />
+                <div className="min-w-0">
+                  <p className="font-medium text-sm text-foreground truncate" data-testid="text-template-name">{template.name}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{template.length.toLocaleString()} caracteres extraídos</p>
+                </div>
+              </div>
+              {isAdmin && (
+                <button onClick={handleDelete} disabled={deleting}
+                  data-testid="button-delete-template"
+                  className="shrink-0 p-2 rounded-lg text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50">
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                </button>
+              )}
+            </div>
+            <div className="mt-3 rounded-lg bg-background/60 border border-border p-3">
+              <p className="text-xs text-muted-foreground font-mono leading-relaxed line-clamp-3">{template.excerpt}</p>
+            </div>
+          </div>
+          {isAdmin && (
+            <button onClick={() => fileRef.current?.click()} disabled={uploading}
+              data-testid="button-replace-template"
+              className="w-full py-2.5 rounded-xl border border-border text-sm text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all flex items-center justify-center gap-2">
+              {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+              Reemplazar plantilla
+            </button>
+          )}
+        </div>
+      ) : (
+        isAdmin ? (
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            data-testid="button-upload-template"
+            className="w-full py-6 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 transition-all flex flex-col items-center gap-2 text-muted-foreground hover:text-foreground">
+            {uploading
+              ? <><Loader2 className="w-6 h-6 animate-spin text-primary" /><span className="text-sm">Procesando…</span></>
+              : <><Upload className="w-6 h-6" /><span className="text-sm font-medium">Subir borrador del despacho</span><span className="text-xs">PDF o DOCX · máx. 20 MB</span></>
+            }
+          </button>
+        ) : (
+          <div className="py-4 text-sm text-muted-foreground text-center">
+            No hay plantilla configurada. Contacta al administrador del despacho.
+          </div>
+        )
+      )}
+
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".pdf,.docx"
+        className="hidden"
+        data-testid="input-template-file"
+        onChange={handleUpload}
+      />
+    </div>
   );
 }

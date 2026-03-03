@@ -692,6 +692,71 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ──────────────────────────────────────────
+  // WRITING TEMPLATE (firm/lawyer draft)
+  // ──────────────────────────────────────────
+  app.get("/api/org/writing-template", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId } = await getOrgCtx(userId);
+    if (!orgId) return res.status(403).json({ message: "Sin organización" });
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+    if (!org?.writingTemplateName) return res.json({ template: null });
+    res.json({
+      template: {
+        name: org.writingTemplateName,
+        excerpt: org.writingTemplateText?.slice(0, 300) ?? "",
+        length: org.writingTemplateText?.length ?? 0,
+      },
+    });
+  });
+
+  app.post("/api/org/writing-template", requireAuth, upload.single("file"), async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { orgId, role } = await getOrgCtx(userId);
+      if (!orgId) return res.status(403).json({ message: "Sin organización" });
+      if (!hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Solo administradores pueden subir plantillas" });
+      if (!req.file) return res.status(400).json({ message: "No se recibió ningún archivo" });
+
+      const buf = req.file.buffer;
+      const name = req.file.originalname;
+      let text = "";
+
+      if (name.endsWith(".pdf") || req.file.mimetype === "application/pdf") {
+        const data = await pdfParse(buf);
+        text = data.text;
+      } else if (name.endsWith(".docx")) {
+        const result = await mammoth.extractRawText({ buffer: buf });
+        text = result.value;
+      } else {
+        return res.status(400).json({ message: "Formato no soportado. Sube un PDF o DOCX." });
+      }
+
+      if (!text.trim()) return res.status(400).json({ message: "No se pudo extraer texto del documento" });
+
+      // Limit to first 6000 chars to keep prompts manageable
+      const trimmedText = text.slice(0, 6000);
+
+      await db.update(organizations)
+        .set({ writingTemplateName: name, writingTemplateText: trimmedText })
+        .where(eq(organizations.id, orgId));
+
+      res.json({ name, length: trimmedText.length, excerpt: trimmedText.slice(0, 300) });
+    } catch (err: any) {
+      console.error("[writing-template] upload error:", err);
+      res.status(500).json({ message: "Error al procesar el archivo" });
+    }
+  });
+
+  app.delete("/api/org/writing-template", requireAuth, async (req, res) => {
+    const userId = getUserId(req);
+    const { orgId, role } = await getOrgCtx(userId);
+    if (!orgId) return res.status(403).json({ message: "Sin organización" });
+    if (!hasRoleAtLeast(role, "admin")) return res.status(403).json({ message: "Solo administradores pueden eliminar plantillas" });
+    await db.update(organizations).set({ writingTemplateName: null, writingTemplateText: null }).where(eq(organizations.id, orgId));
+    res.json({ ok: true });
+  });
+
+  // ──────────────────────────────────────────
   // DOCUMENT ANALYSIS
   // ──────────────────────────────────────────
   app.post("/api/analyze-document", upload.single("file"), async (req, res) => {
@@ -827,6 +892,23 @@ Responde de forma clara, precisa y en español. Si la pregunta no se puede respo
         expert: "lenguaje altamente especializado para expertos",
       };
 
+      // Fetch org writing template if available
+      const userId = getUserId(req);
+      let writingTemplateSection = "";
+      try {
+        const { orgId } = await getOrgCtx(userId);
+        if (orgId) {
+          const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
+          if (org?.writingTemplateText) {
+            writingTemplateSection = `\n\nPLANTILLA DE ESTILO DEL DESPACHO (usa el mismo formato, tono y estructura):
+---
+${org.writingTemplateText.slice(0, 4000)}
+---
+Replica fielmente el estilo, formato, tono y estructura de la plantilla anterior.`;
+          }
+        }
+      } catch { /* non-blocking */ }
+
       const grievancesText = (grievances as any[]).map((g: any, i: number) =>
         `AGRAVIO ${i + 1}: ${g.title}\n${g.description}`).join("\n\n");
 
@@ -847,7 +929,7 @@ Responde de forma clara, precisa y en español. Si la pregunta no se puede respo
 - Cada agravio numerado con: hechos, fundamento jurídico, artículos citados
 - Sección de petitoria formal ('POR TANTO')
 - Bloque de firma con nombre del abogado y número de colegiatura
-Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho procesal costarricense.`,
+Utiliza ${styleMap[writingStyle] || "lenguaje jurídico técnico"} del derecho procesal costarricense.${writingTemplateSection}`,
           },
           {
             role: "user",

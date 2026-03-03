@@ -32,6 +32,8 @@ export const organizations = pgTable("organizations", {
   active: boolean("active").notNull().default(true),
   stripeCustomerId: text("stripe_customer_id"),
   stripeSubscriptionId: text("stripe_subscription_id"),
+  writingTemplateName: text("writing_template_name"),
+  writingTemplateText: text("writing_template_text"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
