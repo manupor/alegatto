@@ -87,8 +87,8 @@ TILOPAY_API_KEY=<tu-tilopay-api-key-aqui>
 TILOPAY_API_USER=<tu-tilopay-user-aqui>
 TILOPAY_API_PASSWORD=<tu-tilopay-password-aqui>
 
-# App URL (actualiza con tu URL de Render)
-APP_URL=https://tu-app.onrender.com
+# App URL (usa tu dominio personalizado)
+APP_URL=https://alegatto.com
 
 # Port (Render lo asigna automáticamente)
 PORT=10000
@@ -116,18 +116,40 @@ Actualiza las URLs autorizadas en Google Cloud Console:
 4. Edita tu OAuth 2.0 Client ID
 5. Agrega a **Authorized redirect URIs**:
    ```
-   https://lexai-cr.onrender.com/api/auth/google/callback
+   https://alegatto.com/api/auth/google/callback
+   https://www.alegatto.com/api/auth/google/callback
    ```
 6. Agrega a **Authorized JavaScript origins**:
    ```
-   https://lexai-cr.onrender.com
+   https://alegatto.com
+   https://www.alegatto.com
    ```
 
-### 6. Configurar Stripe Webhooks
+### 6. Configurar Dominio Personalizado (alegatto.com)
+
+**En Render:**
+1. Ve a tu Web Service en Render Dashboard
+2. Click en **"Settings"** en el menú lateral
+3. Scroll hasta **"Custom Domain"**
+4. Click **"Add Custom Domain"**
+5. Ingresa: `alegatto.com` y `www.alegatto.com`
+6. Render te dará registros DNS para configurar
+
+**En tu proveedor de dominio:**
+1. Ve a la configuración DNS de `alegatto.com`
+2. Agrega los registros que Render te proporcionó:
+   - **Tipo A** para `alegatto.com` → IP de Render
+   - **CNAME** para `www.alegatto.com` → tu-app.onrender.com
+3. Espera a que se propague el DNS (puede tomar hasta 48 horas, usualmente minutos)
+
+**Actualizar APP_URL:**
+- En las variables de entorno de Render, cambia `APP_URL` a `https://alegatto.com`
+
+### 7. Configurar Stripe Webhooks
 
 1. Ve a [Stripe Dashboard](https://dashboard.stripe.com/webhooks)
 2. Click **"Add endpoint"**
-3. URL: `https://lexai-cr.onrender.com/api/stripe/webhook`
+3. URL: `https://alegatto.com/api/stripe/webhook`
 4. Selecciona los eventos que necesites
 5. Copia el **Signing secret** y actualiza `STRIPE_WEBHOOK_SECRET` en Render
 
